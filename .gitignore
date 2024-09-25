@@ -2,5 +2,4 @@ data
 init.sql
 node_modules
 ollama_model_storage
-
 secrets
