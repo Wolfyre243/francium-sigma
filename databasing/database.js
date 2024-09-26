@@ -4,7 +4,7 @@ import db_config from "../secrets/db-config.json" with { type: "json" };
 // Create a new database connection
 export const createBasePool = (host, database) => {
     return new pg.Pool({
-        host: host, // use 127.0.0.1 if in dev environment, 172.23.0.1 before running docker build
+        host: host, 
         port: 5432,
         user: "francium-admin",
         password: db_config.db_password,
