@@ -48,7 +48,7 @@ services:
       - db-password
 
   francium-s:
-    image: fs-serv:v0.2.5
+    image: fs-serv:latest
     ports:
       - 3030:3030
     
