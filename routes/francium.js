@@ -8,7 +8,7 @@ import { HttpResponseOutputParser } from 'langchain/output_parsers';
 
 // Import pgvector configurations and langchain tools
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector'
-import { pgDocumentsConfig, pgConversationConfig } from '../databasing/database.js';
+import { createPGConvoConfig, createPGDocumentConfig, createBasePool } from '../databasing/database.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // Import express stuff and create the router
@@ -18,7 +18,7 @@ const router = express.Router();
 // MARK: Set up Ollama related stuff
 const ollama = new Ollama({
     baseUrl: 'http://host.docker.internal:11434',
-    model: 'aegis:v0.3',
+    model: 'aegis:v0.4L',
     keepAlive: '30m'
 });
 
@@ -57,8 +57,13 @@ router.post('/', async (req, res) => {
         const userMessage = req.body.message;
 
         // Set up pg vector database when a request is made
-        const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, pgConversationConfig);
-        const pgvectorDocumentStore = await PGVectorStore.initialize(embeddings, pgDocumentsConfig);
+        const pg_basepool = createBasePool(
+            "127.0.0.1",
+            "database-atlantis"
+        )
+
+        const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));
+        const pgvectorDocumentStore = await PGVectorStore.initialize(embeddings, createPGDocumentConfig(pg_basepool));
 
         // Fetch old relevant conversation history
         // const convohistQueryResults = await pgvectorConvoStore.similaritySearch(
@@ -128,6 +133,8 @@ router.post('/', async (req, res) => {
         console.log("Conversation refreshed successfully");
 
         // console.log(prev_messages);
+
+        pg_basepool.end(); // Ends the pool
 
         res.json({
             result: result
