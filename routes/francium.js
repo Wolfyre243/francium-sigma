@@ -51,6 +51,7 @@ let prev_messages = ''; // This stores the previous messages as a string.
 const conversationID = uuidv4();
 
 //------------------------------------------------- MARK: Start defining routes------------------------------------------------------------------------
+// TODO: Add better error handling here
 router.post('/', async (req, res) => {
     try {
         // Receive incoming data
@@ -61,10 +62,10 @@ router.post('/', async (req, res) => {
         const pgvectorDocumentStore = await PGVectorStore.initialize(embeddings, pgDocumentsConfig);
 
         // Fetch old relevant conversation history
-        const convohistQueryResults = await pgvectorConvoStore.similaritySearch(
-            userMessage,
-            5
-        );
+        // const convohistQueryResults = await pgvectorConvoStore.similaritySearch(
+        //     userMessage,
+        //     5
+        // );
 
         // Fetch any relevant data from knowledge base
         // TODO: You should probably do some embedding here
@@ -75,6 +76,7 @@ router.post('/', async (req, res) => {
             filter, // this is the optional filter to use.
             // you may wish to use callbacks here as well, to handle success.
         );
+        console.log("document query finished!")
 
         //TODO: turn this into a function in a seperate file
         // Format the results into a readable format
@@ -83,10 +85,10 @@ router.post('/', async (req, res) => {
             documentArr.push(document.pageContent);
         };
         // Format the results into a readable format
-        const convohistArr = [];
-        for await (const item of convohistQueryResults) {
-            convohistArr.push(item.pageContent);
-        };
+        // const convohistArr = [];
+        // for await (const item of convohistQueryResults) {
+        //     convohistArr.push(item.pageContent);
+        // };
 
         // console.log(documentQueryResults);
 
@@ -124,6 +126,7 @@ router.post('/', async (req, res) => {
             [current_conversation],
             { ids: [conversationID] }
         )
+        console.log("Conversation refreshed successfully");
 
         // console.log(prev_messages);
 
@@ -133,6 +136,7 @@ router.post('/', async (req, res) => {
 
     } catch (err) {
         console.log(err);
+        res.status(500).json({ error: 'An error occurred.' });
     }
 });
 
