@@ -19,13 +19,12 @@ const router = express.Router();
 const ollama = new Ollama({
     baseUrl: 'http://host.docker.internal:11434',
     model: 'aegis:v0.3',
-    keepAlive: -1
+    keepAlive: '30m'
 });
 
 // Use an embedding LLM to create embeds
 const embeddings = new OllamaEmbeddings({
     baseUrl: "http://host.docker.internal:11434",
-    keepAlive: -1
 })
 
 // MARK: Create a simple prompt template
@@ -40,10 +39,10 @@ const basePrompt = PromptTemplate.fromTemplate(
 
 // A helper function to format messages
 const formatMessage = (role, messageContent) => {
-    return `${role}: ${messageContent}`;
+    return `${role}: ${messageContent}\n`;
 };
 
-let prev_messages = ''; // This stores the previous messages as a string.
+let prev_messages = []; // This stores the previous messages as a string.
 
 // Generate a uid for the current conversation.
 // This will be refreshed every time the server is restarted.
@@ -94,7 +93,7 @@ router.post('/', async (req, res) => {
 
         const chain = basePrompt.pipe(ollama);
         const result = await chain.invoke({
-            chat_history: prev_messages,
+            chat_history: prev_messages.join('\n'),
             documents: documentArr.join("\n"),
             // past_conversations: convohistArr.join("\n"),
             message: userMessage
@@ -102,12 +101,12 @@ router.post('/', async (req, res) => {
 
         // Store the entire conversation in the pgvector database
         
-        prev_messages = prev_messages.concat(formatMessage('User', userMessage), "\n");
-        prev_messages = prev_messages.concat(formatMessage('You', result), "\n");
+        prev_messages.push(formatMessage('User', userMessage));
+        prev_messages.push(formatMessage('You', result));
         
         // Prepare a conversation document to be stored
         const current_conversation = {
-            pageContent: prev_messages,
+            pageContent: prev_messages.join('\n'),
             metadata: {
                 date: Date.now(),
             }
