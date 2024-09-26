@@ -33,8 +33,6 @@ const basePrompt = PromptTemplate.fromTemplate(
     `Current Chat History: {chat_history}
     Some additional information; These are not necessary applicable, so please assess their relativity before using them in your resposne.:
     {documents}
-    Information from past chat histories; Again, use at your own discretion as they may be irrelevant:
-    {past_conversations}
     user: {message}`
 );
 
@@ -96,7 +94,7 @@ router.post('/', async (req, res) => {
         const result = await chain.invoke({
             chat_history: prev_messages,
             documents: documentArr.join("\n"),
-            past_conversations: convohistArr.join("\n"),
+            // past_conversations: convohistArr.join("\n"),
             message: userMessage
         });
 
