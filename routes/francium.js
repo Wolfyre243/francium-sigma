@@ -138,6 +138,19 @@ router.post('/', async (req, res) => {
 
 // TODO: consider implementing streaming here next time
 
+// POST request for discord.js to inialize a conversation with provided context
+router.put('/discord-init', async (req, res) => {
+    // If context is given, override server's saved context.
+    // So, when initiating a conversation, pass in the context
+    if (req.body.context) {
+        prev_messages = req.body.context;
+    }
+
+    console.log("Discord initialized:\n", prev_messages);
+
+    res.json(prev_messages);
+})
+
 // TODO: add querying api for pgvector here
 router.get('/pgvector', async (req, res) => {
     try {
