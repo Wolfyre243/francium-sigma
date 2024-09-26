@@ -28,8 +28,8 @@ export const pgDocumentsConfig = {
 // For communicating with the Conversation History table.
 export const pgConversationConfig = {
     pool: pg_basepool,
-    tableName: "convohistory", // This is a table that stores conversation histories, all configured below in the "columns" object.
-    collectionName: "documents_collection",
+    tableName: "convohistory", // This is a table that stores documents, all configured below in the "columns" object.
+    collectionName: "convohistory_collection",
     collectionTableName: "collections", // This is a table that stores the collection objects
     columns: {
         idColumnName: "id",
@@ -37,4 +37,5 @@ export const pgConversationConfig = {
         contentColumnName: "content",
         metadataColumnName: "metadata",
     },
-}
+    // distanceStrategy: 'cosine'
+};
