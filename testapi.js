@@ -7,7 +7,8 @@ while (true) {
     const data = await fetch("http://host.docker.internal:3030/francium", {
         method: "POST",
         body: JSON.stringify({
-            message: input
+            message: input,
+            context: "bababa"
         }),
         headers: {
             "Content-Type": "application/json"
