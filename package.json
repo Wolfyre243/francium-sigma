@@ -14,7 +14,8 @@
     "@langchain/core": "^0.3.3",
     "@langchain/ollama": "^0.1.0",
     "express": "^4.21.0",
-    "langchain": "^0.3.2"
+    "langchain": "^0.3.2",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"
