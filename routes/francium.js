@@ -48,7 +48,7 @@ let prev_messages = []; // This stores the previous messages as a string.
 // Generate a uid for the current conversation.
 // This will be refreshed every time the server is restarted.
 // This helps the server track the current conversation.
-const conversationID = uuidv4();
+// const conversationID = uuidv4();
 
 //------------------------------------------------- MARK: Start defining routes------------------------------------------------------------------------
 // TODO: Add better error handling here
