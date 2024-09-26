@@ -4,7 +4,7 @@ import readline from 'readline-sync';
 
 //     const input = readline.question("You\n>> ");
 
-//     const data = await fetch("http://host.docker.internal:3030/francium", {
+//     const data = await fetch("http://localhost:3030/francium", {
 //         method: "POST",
 //         body: JSON.stringify({
 //             message: input
@@ -26,4 +26,6 @@ const data = await fetch("http://localhost:3030/francium/pgvector", {
     }
 });
 
-console.log(data);
+const dataJSON = await data.json();
+
+console.log(dataJSON[0].pageContent);
