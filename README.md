@@ -17,6 +17,8 @@ This is quite irrelevant to whoever is reading this since the project isn't real
 
 *Note that the interfaces listed are not necessarily implemented yet; It's a one man project you know!
 
+More updates to come!
+
 ### Learn More
 Project Francium is a project I started in order to create an omnipotent virtual assistant/friend.
 This chat interface will be one of the many interfaces I will create to interact with the chatbot.
