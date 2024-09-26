@@ -1,31 +1,31 @@
 import readline from 'readline-sync';
 
-// while (true) {
+while (true) {
 
-//     const input = readline.question("You\n>> ");
+    const input = readline.question("You\n>> ");
 
-//     const data = await fetch("http://localhost:3030/francium", {
-//         method: "POST",
-//         body: JSON.stringify({
-//             message: input
-//         }),
-//         headers: {
-//             "Content-Type": "application/json"
-//         }
-//     })
+    const data = await fetch("http://localhost:3030/francium", {
+        method: "POST",
+        body: JSON.stringify({
+            message: input
+        }),
+        headers: {
+            "Content-Type": "application/json"
+        }
+    })
     
-//     const dataJSON = await data.json();
+    const dataJSON = await data.json();
     
-//     console.log(dataJSON.result);
-// }
+    console.log(dataJSON.result);
+}
 
-const data = await fetch("http://localhost:3030/francium/pgvector", {
-    method: "GET",
-    headers: {
-        "Content-Type": "application/json"
-    }
-});
+// const data = await fetch("http://localhost:3030/francium/pgvector", {
+//     method: "GET",
+//     headers: {
+//         "Content-Type": "application/json"
+//     }
+// });
 
-const dataJSON = await data.json();
+// const dataJSON = await data.json();
 
-console.log(dataJSON[0].pageContent);
+// console.log(dataJSON[0].pageContent);

@@ -18,7 +18,7 @@ const router = express.Router();
 const ollama = new Ollama({
     baseUrl: 'http://host.docker.internal:11434',
     model: 'aegis:v0.3',
-    keepAlive: '-1'
+    keepAlive: -1
 });
 
 // Use an embedding LLM to create embeds
@@ -68,6 +68,7 @@ router.post('/', async (req, res) => {
 
 // TODO: consider implementing streaming here next time
 
+// TODO: add querying api for pgvector here
 router.get('/pgvector', async (req, res) => {
     try {
         const filter = { source: 'https://example.com' };
