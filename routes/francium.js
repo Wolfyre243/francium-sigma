@@ -18,13 +18,14 @@ const router = express.Router();
 // MARK: Set up Ollama related stuff
 const ollama = new Ollama({
     baseUrl: 'http://host.docker.internal:11434',
-    model: 'aegis:v0.4L',
-    keepAlive: '30m'
+    model: 'aegis:v0.5',
+    keepAlive: -1
 });
 
 // Use an embedding LLM to create embeds
 const embeddings = new OllamaEmbeddings({
     baseUrl: "http://host.docker.internal:11434",
+    keepAlive: -1
 })
 
 // MARK: Create a simple prompt template
@@ -62,7 +63,7 @@ router.post('/', async (req, res) => {
             "database-atlantis"
         )
 
-        const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));
+        // const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));
         const pgvectorDocumentStore = await PGVectorStore.initialize(embeddings, createPGDocumentConfig(pg_basepool));
 
         // Fetch old relevant conversation history
@@ -110,30 +111,30 @@ router.post('/', async (req, res) => {
         prev_messages.push(formatMessage('You', result));
         
         // Prepare a conversation document to be stored
-        const current_conversation = {
-            pageContent: prev_messages.join('\n'),
-            metadata: {
-                date: Date.now(),
-            }
-        }
+        // const current_conversation = {
+        //     pageContent: prev_messages.join('\n'),
+        //     metadata: {
+        //         date: Date.now(),
+        //     }
+        // }
 
         // Check if the document already exists in the pgvector database:
         // The first time a new conversation is started, there should be an error...
-        try {
-            await pgvectorConvoStore.delete({ ids: [conversationID] });
-            console.log("Conversation deleted successfully...");
-        } catch (e) {
-            console.log(e, "\nConversation does not exist yet; Creating new one...");
-        }
-        // Add the current conversation if it exists, or create a new one.
-        await pgvectorConvoStore.addDocuments(
-            [current_conversation],
-            { ids: [conversationID] }
-        )
-        console.log("Conversation refreshed successfully");
+        // try {
+        //     await pgvectorConvoStore.delete({ ids: [conversationID] });
+        //     console.log("Conversation deleted successfully...");
+        // } catch (e) {
+        //     console.log(e, "\nConversation does not exist yet; Creating new one...");
+        // }
+        // // Add the current conversation if it exists, or create a new one.
+        // await pgvectorConvoStore.addDocuments(
+        //     [current_conversation],
+        //     { ids: [conversationID] }
+        // )
+        // console.log("Conversation refreshed successfully");
 
         // console.log(prev_messages);
-
+        console.log("Sending response data...");
         pg_basepool.end(); // Ends the pool
 
         res.json({
