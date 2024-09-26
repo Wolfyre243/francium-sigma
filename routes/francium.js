@@ -14,7 +14,7 @@ const basePrompt = PromptTemplate.fromTemplate("Chat History: {chat_history}\nus
 const ollama = new Ollama({
     baseUrl: 'http://host.docker.internal:11434',
     model: 'aegis:v0.3',
-    keepAlive: '30m'
+    keepAlive: '-1'
 });
 
 // A helper function to format messages
