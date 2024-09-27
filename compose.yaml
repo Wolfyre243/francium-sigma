@@ -9,15 +9,6 @@
 # https://github.com/docker/awesome-compose
 services:
 
-  # Start the Ollama LLM service.
-  # This is the backbone of almost all the apps in the ecosystem.
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ./ollama_model_storage:/usr/share/ollama/.ollama/models
-    ports:
-      - 11434:11434
-
   # Start the pgveector database.
   # This will be the brain of our ecosystem and all memory will be stored here
   pgvector:
@@ -51,7 +42,6 @@ services:
     image: fs-serv:latest
     ports:
       - 3030:3030
-    
 
   # Start the Francium Chat application.
   # This is a simple chat interface to test and run the Ollama LLMs.

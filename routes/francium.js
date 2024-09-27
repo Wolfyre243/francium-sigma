@@ -55,7 +55,7 @@ router.post('/', async (req, res) => {
 
         // Set up pg vector database when a request is made
         const pg_basepool = createBasePool(
-            "127.0.0.1", // use 127.0.0.1 if in dev environment, 172.23.0.1 before running docker build
+            "172.23.0.1", // use 127.0.0.1 if in dev environment, 172.23.0.1 before running docker build
             "database-atlantis"
         )
 
