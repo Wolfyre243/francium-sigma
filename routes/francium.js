@@ -14,20 +14,22 @@ import { createPGConvoConfig, createPGDocumentConfig, createBasePool } from '../
 // Import helper functions
 import { formatMessage, formatMessageArr } from '../library/formatter.js';
 
+import envconfig from '../secrets/env-config.json' with { type: "json" };
+
 // Import express stuff and create the router
 import express from 'express';
 const router = express.Router();
 
 // MARK: Set up Ollama related stuff
 const ollama = new Ollama({
-    baseUrl: 'http://host.docker.internal:11434',
+    baseUrl: `http://${envconfig.endpoint}:11434`,
     model: 'Wolfyre/aegis:v0.5',
     keepAlive: -1
 });
 
 // Use an embedding LLM to create embeds
 const embeddings = new OllamaEmbeddings({
-    baseUrl: "http://host.docker.internal:11434",
+    baseUrl: `http://${envconfig.endpoint}:11434`,
     keepAlive: -1
 })
 

@@ -1,5 +1,6 @@
 import express from 'express';
-import francRouter from './routes/francium.js'
+import francRouter from './routes/francium.js';
+import TTSRouter from './routes/texttospeech.js';
 
 const app = express();
 
@@ -10,6 +11,7 @@ app.get('/', (req, res) => {
 // All requests to "test" will be routed here
 app.use(express.json());
 app.use('/francium', francRouter)
+app.use('/texttospeech', TTSRouter)
 
 app.listen(3030);
 
