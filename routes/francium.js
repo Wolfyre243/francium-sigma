@@ -29,7 +29,7 @@ const ollama = new Ollama({
 const embeddings = new OllamaEmbeddings({
     baseUrl: "http://host.docker.internal:11434",
     keepAlive: -1
-})
+});
 
 // MARK: Create a simple prompt template
 const basePrompt = PromptTemplate.fromTemplate(
@@ -57,7 +57,7 @@ router.post('/', async (req, res) => {
         const pg_basepool = createBasePool(
             "127.0.0.1", // use 127.0.0.1 if in dev environment, 172.23.0.1 before running docker build
             "database-atlantis"
-        )
+        );
 
         // const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));
         const pgvectorDocumentStore = await PGVectorStore.initialize(embeddings, createPGDocumentConfig(pg_basepool));
