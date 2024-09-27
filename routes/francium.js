@@ -12,7 +12,7 @@ import { createPGConvoConfig, createPGDocumentConfig, createBasePool } from '../
 // import { v4 as uuidv4 } from 'uuid';
 
 // Import helper functions
-import { formatMessage, formatMessageArr } from '../lib/formatter.js';
+import { formatMessage, formatMessageArr } from '../library/formatter.js';
 
 // Import express stuff and create the router
 import express from 'express';
@@ -20,14 +20,14 @@ const router = express.Router();
 
 // MARK: Set up Ollama related stuff
 const ollama = new Ollama({
-    baseUrl: 'http://localhost:11434',
+    baseUrl: 'http://host.docker.internal:11434',
     model: 'Wolfyre/aegis:v0.5',
     keepAlive: -1
 });
 
 // Use an embedding LLM to create embeds
 const embeddings = new OllamaEmbeddings({
-    baseUrl: "http://localhost:11434",
+    baseUrl: "http://host.docker.internal:11434",
     keepAlive: -1
 })
 
@@ -55,7 +55,7 @@ router.post('/', async (req, res) => {
 
         // Set up pg vector database when a request is made
         const pg_basepool = createBasePool(
-            "172.23.0.1", // use 127.0.0.1 if in dev environment, 172.23.0.1 before running docker build
+            "127.0.0.1", // use 127.0.0.1 if in dev environment, 172.23.0.1 before running docker build
             "database-atlantis"
         )
 
