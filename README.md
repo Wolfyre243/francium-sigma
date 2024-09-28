@@ -12,8 +12,7 @@ I will be documenting most, if not all (hopefully), of these many endpoints.
 This is quite irrelevant to whoever is reading this since the project isn't really production ready, but here it is anyway:
 
 - francium-chat: ⛔
-- francium-discord: ❓(should probably work ✅)
-- francium-curl: ❓
+- francium-discord: ✅
 
 *Note that the interfaces listed are not necessarily implemented yet; It's a one man project you know!
 
