@@ -2,8 +2,9 @@
 
 //--------------------------------------------------------MARK: Import necessary tools----------------------------------------------------------------
 // Import langchain tools
-import { Ollama, OllamaEmbeddings } from '@langchain/ollama';
+import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama';
 import { PromptTemplate } from '@langchain/core/prompts';
+import { HumanMessage } from '@langchain/core/messages';
 // import { HttpResponseOutputParser } from 'langchain/output_parsers';
 
 // Import pgvector configurations and langchain tools
@@ -14,6 +15,15 @@ import { createPGConvoConfig, createPGDocumentConfig, createBasePool } from '../
 // Import helper functions
 import { formatMessage, formatMessageArr } from '../library/formatter.js';
 
+// Import Tools for the LLM to use
+import { calculatorTool } from  '../tools/calculatorTool.js';
+
+// Set up the tools
+const tools = [calculatorTool];
+const toolList = {
+    calculator: calculatorTool // The key should match the "name" property of the tool.
+}
+
 import envconfig from '../secrets/env-config.json' with { type: "json" };
 
 // Import express stuff and create the router
@@ -21,11 +31,13 @@ import express from 'express';
 const router = express.Router();
 
 // MARK: Set up Ollama related stuff
-const ollama = new Ollama({
+const ollama = new ChatOllama({
     baseUrl: `http://${envconfig.endpoint}:11434`,
     model: 'Wolfyre/aegis:v0.5',
     keepAlive: -1
 });
+
+const ollamaWithTools = ollama.bindTools(tools);
 
 // Use an embedding LLM to create embeds
 const embeddings = new OllamaEmbeddings({
@@ -43,6 +55,8 @@ const basePrompt = PromptTemplate.fromTemplate(
 
 let prev_messages = []; // This stores the previous messages as a string.
 
+const messages = [];
+
 // Generate a uid for the current conversation.
 // This will be refreshed every time the server is restarted.
 // This helps the server track the current conversation.
@@ -54,10 +68,11 @@ router.post('/', async (req, res) => {
     try {
         // Receive incoming data
         const userMessage = req.body.message;
+        messages.push(new HumanMessage(userMessage));
 
         // Set up pg vector database when a request is made
         const pg_basepool = createBasePool(
-            "172.23.0.1", // use 127.0.0.1 if in dev environment, 172.23.0.1 before running docker build
+            "127.0.0.1", // use 127.0.0.1 if in dev environment, 172.23.0.1 before running docker build
             "database-atlantis"
         );
 
@@ -93,18 +108,47 @@ router.post('/', async (req, res) => {
 
         // console.log(documentQueryResults);
 
-        const chain = basePrompt.pipe(ollama);
-        const result = await chain.invoke({
-            chat_history: prev_messages.join('\n'),
-            documents: documentArr.join("\n"),
-            // past_conversations: convohistArr.join("\n"),
-            message: userMessage
-        });
+        // Add context here
+        messages.push(
+            new HumanMessage(`Some additional information; These are not necessary applicable, so please assess their relativity before using them in your resposne.:\n${documentArr.join("\n")}`)
+        )
+
+        // const chain = basePrompt.pipe(ollamaWithTools);
+
+        // // First invocation to call tools
+        // const result = await chain.invoke({
+        //     chat_history: prev_messages.join('\n'),
+        //     documents: documentArr.join("\n"),
+        //     // past_conversations: convohistArr.join("\n"),
+        //     message: userMessage
+        // });
+
+        const result = await ollamaWithTools.invoke(messages); // returns an AIMessage Class object
+        messages.push(result);
+        
+        // Use the tools
+        for (const toolCall of result.tool_calls) {
+            console.log('Calling tool:\n', toolCall); // verbose to see what the AI is trying to do with the tools
+            const selectedTool = toolList[toolCall.name];
+            try {
+                const toolMessage = await selectedTool.invoke(toolCall);
+                messages.push(toolMessage);
+            } catch (error) {
+                console.log(`Error invoking tool - ${error}`);
+            }
+        }
+
+        // console.log("Messages before final result:\n", messages);
+
+        // Invoke again after using the tools
+        const finalResult = await ollamaWithTools.invoke(messages);
+
+        // console.log(finalResult);
 
         // Store the entire conversation in the pgvector database
         
-        prev_messages.push(formatMessage('User', userMessage));
-        prev_messages.push(formatMessage('You', result));
+        // prev_messages.push(formatMessage('User', userMessage));
+        // prev_messages.push(formatMessage('You', result));
         
         // Prepare a conversation document to be stored
         // const current_conversation = {
@@ -134,7 +178,7 @@ router.post('/', async (req, res) => {
         pg_basepool.end(); // Ends the pool
 
         res.json({
-            result: result
+            result: finalResult.content
         });
 
     } catch (err) {
