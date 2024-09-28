@@ -32,7 +32,6 @@ router.post('/', async (req, res) => {
     res.json({
         base64String: thewavefile,
     });
-
 });
 
 // Export the router to use in other parts of your application
