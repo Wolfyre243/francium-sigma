@@ -16,7 +16,8 @@ const speaker_embeddings = 'https://huggingface.co/datasets/Xenova/transformers.
 
 // Define a GET route for '/' that returns 'Hello World!' as a response
 router.post('/', async (req, res) => {
-    const messageToSpeak = req.body.message;
+    const messageToSpeak = req.body.message.replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '').replace(/\s+/g, ' ').trim();
+
     console.log(`Synthesizing: ${messageToSpeak}`);
 
     const output = await synthesizer(messageToSpeak, { speaker_embeddings });
