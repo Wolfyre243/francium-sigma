@@ -2,7 +2,7 @@ import wavefile from 'wavefile';
 import fs from 'fs';
 
 // import readline from 'readline-sync';
-import envconfig from './secrets/env-config.json' with { type: "json" };
+// import envconfig from './secrets/env-config.json' with { type: "json" };
 
 // while (true) {
 
@@ -38,7 +38,7 @@ import envconfig from './secrets/env-config.json' with { type: "json" };
 
 // console.log(dataJSON);
 
-const output = await fetch(`http://${envconfig.endpoint}:3030/texttospeech`, {
+const output = await fetch(`http://localhost:3030/texttospeech`, {
     method: "POST",
     body: JSON.stringify({
         message: "Hello! I am Alyssa, and this is a test output file.",
