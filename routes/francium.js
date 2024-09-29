@@ -17,7 +17,7 @@ import express from 'express';
 const router = express.Router();
 
 // MARK: Set up Ollama related stuff
-import { ollama, ollamaEmbeddings as embeddings, callTools } from '../library/ollamaSetup.js';
+import { ollama, ollamaEmbeddings as embeddings, callTools, defaultWorkflow } from '../library/ollamaSetup.js';
 
 // MARK: Create a simple prompt template
 // const basePrompt = PromptTemplate.fromTemplate(
@@ -34,6 +34,8 @@ let messages = [];
 // This will be refreshed every time the server is restarted.
 // This helps the server track the current conversation.
 // const conversationID = uuidv4();
+
+
 
 //------------------------------------------------- MARK: Start defining routes------------------------------------------------------------------------
 // TODO: Add better error handling here
@@ -124,6 +126,18 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: 'An error occurred.' });
     }
 });
+
+router.post('/agent', async (req,res) => {
+    const finalResult = await defaultWorkflow.invoke(
+        { messages: [new HumanMessage(req.body.message)] },
+        { configurable: { thread_id: "42" } },
+    );
+    console.log(finalResult);
+
+    res.json({
+        result: finalResult.messages[finalResult.messages.length - 1].content
+    })
+})
 
 // TODO: consider implementing streaming here next time
 

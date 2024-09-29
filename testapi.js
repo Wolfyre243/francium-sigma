@@ -8,7 +8,7 @@ while (true) {
 
     const input = readline.question("You\n>> ");
 
-    const data = await fetch(`http://${envconfig.endpoint}:3030/francium`, {
+    const data = await fetch(`http://${envconfig.endpoint}:3030/francium/agent`, {
         method: "POST",
         body: JSON.stringify({
             message: input,
