@@ -103,7 +103,7 @@ const createTodoTool = tool(
     },
     {
         name: 'createTodoTool',
-        description: 'A tool to create a new To-Do item. This tool is a tool for you to help me create new tasks that I EXPLICITLY tell you to create a To-Do for. Please do not create random To-dos unessarily.',
+        description: 'A tool to create a new task item. This tool creates new tasks and stores them in the database.',
         schema: createTodoSchema,
     }
 );

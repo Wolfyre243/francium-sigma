@@ -210,6 +210,9 @@ async function generate(state) {
 };
 
 // Define a new graph.
+// TODO: Use a different model to determine whether or not to call a tool.
+// Basically seperate the tool calling from the generative LLM.
+// Continue invoking tools where necessary.
 const workflow = new StateGraph(MessagesAnnotation)
     .addNode("agent", callModel)
     .addEdge("__start__", "agent")
