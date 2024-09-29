@@ -17,7 +17,7 @@ while (true) {
         headers: {
             "Content-Type": "application/json"
         }
-    })
+    });
     
     const dataJSON = await data.json();
     
