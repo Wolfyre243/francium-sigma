@@ -53,15 +53,18 @@ export const todoTool = tool(
             case 'delete':
                 // This part should be implemented according to your actual database logic
                 console.log(`Todo deleted with name: ${todo_name}`);
+                // Search the database and get the ID of the task to delete.
+                // Delete the task using the ID.
                 return `Todo deleted with name: ${todo_name}`
             case 'query':
                 console.log(`Todo queried with name: ${todo_name}`);
+                // Return a formatted list of To-dos.
                 return `Todo found with name: ${todo_name}`
         }
     },
     {
         name: 'todotool',
-        description: 'A tool to create a new To-Do item, delete an existing item, or query the database to check if a To-Do already exists. This todo tool is a tool for you to help me keep track of tasks that I EXPLICITLY tell you to create a To-Do for. DO NOT unecessarily create a to-do unless I explicitly tell you to.',
+        description: 'A tool to create a new To-Do item, delete an existing item, or query the database to check if a To-Do already exists. This todo tool is a tool for you to help me keep track of tasks that I EXPLICITLY tell you to create a To-Do for.',
         schema: todoToolSchema,
     }
 );

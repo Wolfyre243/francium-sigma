@@ -17,7 +17,7 @@ import express from 'express';
 const router = express.Router();
 
 // MARK: Set up Ollama related stuff
-import { ollamaWithTools as ollama, ollamaEmbeddings as embeddings, callTools } from '../library/ollamaSetup.js';
+import { ollama, ollamaEmbeddings as embeddings, callTools } from '../library/ollamaSetup.js';
 
 // MARK: Create a simple prompt template
 // const basePrompt = PromptTemplate.fromTemplate(

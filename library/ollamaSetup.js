@@ -16,13 +16,11 @@ const toolList = {
     todotool: todoTool
 }
 
-const ollama = new ChatOllama({
+export const ollama = new ChatOllama({
     baseUrl: `http://${envconfig.endpoint}:11434`,
     model: 'Wolfyre/aegis:v0.5',
     keepAlive: -1
-});
-
-export const ollamaWithTools = ollama.bindTools(tools);
+}).bindTools(tools);
 
 export const ollamaEmbeddings = new OllamaEmbeddings({
     baseUrl: `http://${envconfig.endpoint}:11434`,
