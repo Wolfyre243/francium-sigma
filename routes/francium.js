@@ -2,10 +2,7 @@
 
 //--------------------------------------------------------MARK: Import necessary tools----------------------------------------------------------------
 // Import langchain tools
-import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama';
-import { PromptTemplate } from '@langchain/core/prompts';
 import { HumanMessage } from '@langchain/core/messages';
-// import { HttpResponseOutputParser } from 'langchain/output_parsers';
 
 // Import pgvector configurations and langchain tools
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector'
@@ -15,47 +12,23 @@ import { createPGConvoConfig, createPGDocumentConfig, createBasePool } from '../
 // Import helper functions
 import { formatMessage, formatMessageArr } from '../library/formatter.js';
 
-// Import Tools for the LLM to use
-import { calculatorTool } from  '../tools/calculatorTool.js';
-
-// Set up the tools
-const tools = [calculatorTool];
-const toolList = {
-    calculator: calculatorTool // The key should match the "name" property of the tool.
-}
-
-import envconfig from '../secrets/env-config.json' with { type: "json" };
-
 // Import express stuff and create the router
 import express from 'express';
 const router = express.Router();
 
 // MARK: Set up Ollama related stuff
-const ollama = new ChatOllama({
-    baseUrl: `http://${envconfig.endpoint}:11434`,
-    model: 'Wolfyre/aegis:v0.5',
-    keepAlive: -1
-});
-
-const ollamaWithTools = ollama.bindTools(tools);
-
-// Use an embedding LLM to create embeds
-const embeddings = new OllamaEmbeddings({
-    baseUrl: `http://${envconfig.endpoint}:11434`,
-    keepAlive: -1
-});
+import { ollama, ollamaEmbeddings as embeddings, callTools } from '../library/ollamaSetup.js';
 
 // MARK: Create a simple prompt template
-const basePrompt = PromptTemplate.fromTemplate(
-    `Current Chat History: {chat_history}
-    Some additional information; These are not necessary applicable, so please assess their relativity before using them in your resposne.:
-    {documents}
-    user: {message}`
-);
+// const basePrompt = PromptTemplate.fromTemplate(
+//     `Current Chat History: {chat_history}
+//     Some additional information; These are not necessary applicable, so please assess their relativity before using them in your resposne.:
+//     {documents}
+//     user: {message}`
+// );
 
 let prev_messages = []; // This stores the previous messages as a string.
-
-const messages = [];
+let messages = [];
 
 // Generate a uid for the current conversation.
 // This will be refreshed every time the server is restarted.
@@ -71,19 +44,10 @@ router.post('/', async (req, res) => {
         messages.push(new HumanMessage(userMessage));
 
         // Set up pg vector database when a request is made
-        const pg_basepool = createBasePool(
-            "172.23.0.1", // use 127.0.0.1 if in dev environment, 172.23.0.1 before running docker build
-            "database-atlantis"
-        );
+        const pg_basepool = createBasePool("database-atlantis");
 
         // const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));
         const pgvectorDocumentStore = await PGVectorStore.initialize(embeddings, createPGDocumentConfig(pg_basepool));
-
-        // Fetch old relevant conversation history
-        // const convohistQueryResults = await pgvectorConvoStore.similaritySearch(
-        //     userMessage,
-        //     5
-        // );
 
         // Fetch any relevant data from knowledge base
         // TODO: You should probably do some embedding here
@@ -96,52 +60,26 @@ router.post('/', async (req, res) => {
         );
         console.log("document query finished!");
 
-        //TODO: turn this into a function in a seperate file
         // Format the results into a readable format
         const documentArr = formatMessageArr(documentQueryResults);
         console.log("Testing: Can documents be fetched?\n", documentArr);
-        // Format the results into a readable format
-        // const convohistArr = [];
-        // for await (const item of convohistQueryResults) {
-        //     convohistArr.push(item.pageContent);
-        // };
-
-        // console.log(documentQueryResults);
 
         // Add context here
         messages.push(
             new HumanMessage(`Some additional information; These are not necessary applicable, so please assess their relativity before using them in your resposne.:\n${documentArr.join("\n")}`)
         )
 
-        // const chain = basePrompt.pipe(ollamaWithTools);
-
-        // // First invocation to call tools
-        // const result = await chain.invoke({
-        //     chat_history: prev_messages.join('\n'),
-        //     documents: documentArr.join("\n"),
-        //     // past_conversations: convohistArr.join("\n"),
-        //     message: userMessage
-        // });
-
-        const result = await ollamaWithTools.invoke(messages); // returns an AIMessage Class object
+        const result = await ollama.invoke(messages); // returns an AIMessage Class object
         messages.push(result);
         
         // Use the tools
-        for (const toolCall of result.tool_calls) {
-            console.log('Calling tool:\n', toolCall); // verbose to see what the AI is trying to do with the tools
-            const selectedTool = toolList[toolCall.name];
-            try {
-                const toolMessage = await selectedTool.invoke(toolCall);
-                messages.push(toolMessage);
-            } catch (error) {
-                console.log(`Error invoking tool - ${error}`);
-            }
-        }
+        const toolMessageArr = await callTools(result.tool_calls);
+        messages = messages.concat(toolMessageArr);
 
         // console.log("Messages before final result:\n", messages);
 
         // Invoke again after using the tools
-        const finalResult = await ollamaWithTools.invoke(messages);
+        const finalResult = await ollama.invoke(messages);
 
         // console.log(finalResult);
 
