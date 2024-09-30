@@ -43,6 +43,11 @@ services:
     ports:
       - 3030:3030
 
+  francium-discord:
+    image: francium-discord:latest
+    ports:
+      - 4000:4000
+
   # Start the Francium Chat application.
   # This is a simple chat interface to test and run the Ollama LLMs.
   francium-chat:
