@@ -21,4 +21,4 @@ app.use('/texttospeech', TTSRouter)
 app.listen(3030);
 
 console.log('hello');
-console.log(fs.readFileSync(path.join(__dirname, './ServerStorage/text.txt'), { encoding: 'utf8' }));
+// console.log(fs.readFileSync(path.join(__dirname, './ServerStorage/text.txt'), { encoding: 'utf8' }));
