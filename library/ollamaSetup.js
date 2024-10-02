@@ -16,12 +16,13 @@ const checkpointer = new MemorySaver();
 // Import Tools for the LLM to use
 import { calculatorTool } from  '../tools/calculatorTool.js';
 import { todoToolkit } from  '../tools/todoTool.js';
+import { searchTool } from   '../tools/searchTools.js';
 
 // Import extra stuff
 import envconfig from '../secrets/env-config.json' with { type: "json" };
 
 // Set up the tools
-let tools = [calculatorTool, todoToolkit];
+let tools = [calculatorTool, todoToolkit, searchTool];
 tools = tools.flat();
 // console.log(tools);
 const toolNode = new ToolNode(tools);
