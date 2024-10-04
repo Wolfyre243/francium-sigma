@@ -33,7 +33,7 @@ const toolNode = new ToolNode(tools);
 
 export const ollama = new ChatOllama({
     baseUrl: `http://${envconfig.endpoint}:11434`,
-    model: 'Wolfyre/aegis:v0.5',
+    model: 'aegis:v0.6',
     keepAlive: -1
 }).bindTools(tools);
 
@@ -45,7 +45,6 @@ export const ollamaEmbeddings = new OllamaEmbeddings({
 // Define some functions
 // Determine whether the LLM should continue on or end the conversation and reply to the user.
 // This might be depreceated in favor of shouldRetrieve
-// Nevermind whatever that was it was confusing af
 function shouldContinue({ messages }) {
     const lastMessage = messages[messages.length -1];
     // console.log(lastMessage);

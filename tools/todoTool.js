@@ -77,7 +77,6 @@ const initialiseTodoDatabase = async () => {
 //     }
 // );
 
-// TODO: I don't think we should let the LLM create tools...
 const createTodoTool = tool(
     async ({ todo_name, todo_description }) => {
         console.log("Creating todo...");
