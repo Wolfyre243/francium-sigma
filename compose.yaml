@@ -31,7 +31,7 @@ services:
     image: dpage/pgadmin4
     ports:
       - 8080:80
-      - 443:443
+      - 4433:443
     environment:
       - PGADMIN_DEFAULT_EMAIL=wolfyreblueflare@gmail.com
       - PGADMIN_DEFAULT_PASSWORD_FILE=/run/secrets/db-password
