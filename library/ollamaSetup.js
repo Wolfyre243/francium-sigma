@@ -125,6 +125,7 @@ async function gradeDocuments(documents, question) {
     const model = new ChatOllama({
         model: 'llama3.1:8b',
         temperature: 0,
+        keepAlive: "30m"
     });
 
     // Create a specialised llm to check relevancy of the documents retrieved
