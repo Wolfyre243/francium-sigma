@@ -5,9 +5,9 @@
 import { HumanMessage } from '@langchain/core/messages';
 
 // Import pgvector configurations and langchain tools
-import { PGVectorStore } from '@langchain/community/vectorstores/pgvector'
-// import { createPGConvoConfig, createPGDocumentConfig, createBasePool } from '../databasing/database.js';
-// import { v4 as uuidv4 } from 'uuid';
+import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
+import { createPGConvoConfig, createPGDocumentConfig, createBasePool } from '../databasing/database.js';
+import { v4 as uuidv4 } from 'uuid';
 
 // Import express stuff and create the router
 import express from 'express';
@@ -25,6 +25,9 @@ import { ollamaEmbeddings as embeddings, defaultWorkflow } from '../library/olla
 // );
 
 let prev_messages = []; // This stores the previous messages as a string.
+
+const conversationId = uuidv4();
+let messageSerialNo = 0;
 
 //------------------------------------------------- MARK: Start defining routes------------------------------------------------------------------------
 // router.post('/', async (req, res) => {
@@ -121,6 +124,27 @@ router.post('/', async (req,res) => {
         { configurable: { thread_id: "42" } },
     );
     console.log(finalResult);
+
+    const pg_basepool = createBasePool("database-atlantis");
+    const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));
+    
+    // Prepare the interaction to be stored into the database
+    const today = new Date(Date.now());
+    const chatInteraction = {
+        pageContent: `${req.body.message}\nAssistant:${finalResult.messages[finalResult.messages.length - 1].content}`,
+        metadata: {
+            conversationId: conversationId,
+            serialNo: messageSerialNo,
+            date: today.toISOString(),
+        }
+    }
+
+    await pgvectorConvoStore.addDocuments(
+        [chatInteraction],
+        { ids: [uuidv4()] }
+    )
+
+    pg_basepool.end(); // Ends the pool
 
     res.json({
         result: finalResult.messages[finalResult.messages.length - 1].content
