@@ -9,9 +9,6 @@ import { PGVectorStore } from '@langchain/community/vectorstores/pgvector'
 // import { createPGConvoConfig, createPGDocumentConfig, createBasePool } from '../databasing/database.js';
 // import { v4 as uuidv4 } from 'uuid';
 
-// Import helper functions
-// import { formatMessage, formatMessageArr } from '../library/formatter.js';
-
 // Import express stuff and create the router
 import express from 'express';
 const router = express.Router();
@@ -29,15 +26,7 @@ import { ollamaEmbeddings as embeddings, defaultWorkflow } from '../library/olla
 
 let prev_messages = []; // This stores the previous messages as a string.
 
-// Generate a uid for the current conversation.
-// This will be refreshed every time the server is restarted.
-// This helps the server track the current conversation.
-// const conversationID = uuidv4();
-
-
-
 //------------------------------------------------- MARK: Start defining routes------------------------------------------------------------------------
-// TODO: Add better error handling here
 // router.post('/', async (req, res) => {
 //     try {
 //         // Receive incoming data
