@@ -16,14 +16,6 @@ const router = express.Router();
 // MARK: Set up Ollama related stuff
 import { ollamaEmbeddings as embeddings, defaultWorkflow } from '../library/ollamaSetup.js';
 
-// MARK: Create a simple prompt template
-// const basePrompt = PromptTemplate.fromTemplate(
-//     `Current Chat History: {chat_history}
-//     Some additional information; These are not necessary applicable, so please assess their relativity before using them in your resposne.:
-//     {documents}
-//     user: {message}`
-// );
-
 let prev_messages = []; // This stores the previous messages as a string.
 
 const conversationId = uuidv4();
@@ -131,7 +123,7 @@ router.post('/', async (req,res) => {
     // Prepare the interaction to be stored into the database
     const today = new Date(Date.now());
     const chatInteraction = {
-        pageContent: `${req.body.message}\nAssistant:${finalResult.messages[finalResult.messages.length - 1].content}`,
+        pageContent: `${req.body.message}\nAlyssa:${finalResult.messages[finalResult.messages.length - 1].content}`,
         metadata: {
             conversationId: conversationId,
             serialNo: messageSerialNo,
