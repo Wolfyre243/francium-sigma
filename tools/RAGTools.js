@@ -23,18 +23,29 @@ export const messageRAGTool = tool(
             const pg_basepool = createBasePool("database-atlantis");
             const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));
             
-            const searchResults = await pgvectorConvoStore.similaritySearch(
+            const searchResults = await pgvectorConvoStore.similaritySearchWithScore(
                 query,
                 5
             );
 
-            const relevantConversations = searchResults.map(doc => doc.pageContent + '\n');
+            // const relevantConversations = searchResults.map(doc => doc.pageContent + '\n');
+            // TODO: add how long ago the messages were sent here
+            const today = new Date(Date.now())
+            let relevantConversations = '';
+            for (const [doc, score] of searchResults) {
+                const timeDiff = Math.floor((today-doc.metadata.date) / 1000 / 60 / 60 / 24)
+                relevantConversations += `{
+                [Similarity score: ${score}]\n
+                Messages sent ${timeDiff ? `${timeDiff} day(s) ago.` : 'today.'}\n
+                ${doc.pageContent}
+                },\n\n`;
+            }
+            
             console.log("Finished querying message history table!");
 
-            // TODO: add reranking here
+            pg_basepool.end();
 
-
-            return `Here are some potentially relevant past conversations; take them with a grain of salt, as they are not necessarily useful. Please ensure that the information provided here is relevant before using them as context:\n\n${relevantConversations}`;
+            return `Here are some potentially relevant past conversations from long ago; take them with a grain of salt, as they are not necessarily useful. Please ensure that the information provided here is relevant before using them as context:\n\n${relevantConversations}`;
         
         } catch (error) {
             console.log(error);

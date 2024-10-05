@@ -5,7 +5,7 @@
 import { HumanMessage } from '@langchain/core/messages';
 
 // Import pgvector configurations and langchain tools
-import { PGVectorStore } from '@langchain/community/vectorstores/pgvector'
+import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
 import { createPGConvoConfig, createPGDocumentConfig, createBasePool } from '../databasing/database.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -131,11 +131,11 @@ router.post('/', async (req,res) => {
     // Prepare the interaction to be stored into the database
     const today = new Date(Date.now());
     const chatInteraction = {
-        pageContent: `${req.body.message}\n${finalResult.messages[finalResult.messages.length - 1].content}`,
+        pageContent: `${req.body.message}\nAssistant:${finalResult.messages[finalResult.messages.length - 1].content}`,
         metadata: {
             conversationId: conversationId,
             serialNo: messageSerialNo,
-            date: today.toLocaleString('en-SG', { timeZone: 'UTC' }),
+            date: today.toISOString(),
         }
     }
 
