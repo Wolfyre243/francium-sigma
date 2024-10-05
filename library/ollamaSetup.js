@@ -17,12 +17,13 @@ const checkpointer = new MemorySaver();
 import { calculatorTool } from  '../tools/calculatorTool.js';
 import { todoToolkit } from  '../tools/todoTool.js';
 import { searchTool } from   '../tools/searchTools.js';
+import  { messageRAGTool } from   '../tools/RAGTools.js';
 
 // Import extra stuff
 import envconfig from '../secrets/env-config.json' with { type: "json" };
 
 // Set up the tools
-let tools = [calculatorTool, todoToolkit, searchTool];
+let tools = [calculatorTool, todoToolkit, searchTool, messageRAGTool];
 tools = tools.flat();
 // console.log(tools);
 const toolNode = new ToolNode(tools);
@@ -40,7 +41,7 @@ export const ollama = new ChatOllama({
 export const ollamaEmbeddings = new OllamaEmbeddings({
     baseUrl: `http://${envconfig.endpoint}:11434`,
     keepAlive: -1
-    // TOOD: Change the model instead of using default
+    // TODO: Change the model instead of using default
 });
 
 // Define some functions
@@ -216,10 +217,10 @@ async function generate(state) {
 // Continue invoking tools where necessary.
 const workflow = new StateGraph(MessagesAnnotation)
     .addNode("agent", callModel)
-    .addEdge("__start__", "agent")
     .addNode("tools", toolNode)
-    .addEdge("tools", "agent")
-    .addConditionalEdges("agent", shouldContinue)
+    .addEdge("__start__", "agent")
+    .addConditionalEdges("agent", shouldContinue, ["tools", "__end__"])
+    .addEdge("tools", "agent");
 
 export const defaultWorkflow = workflow.compile({
     checkpointer,
