@@ -1,7 +1,7 @@
 //----------------------------------MARK: Import dependencies--------------------------------------
 // Import langchain stuff
 import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama';
-import { AIMessage, HumanMessage, BaseMessage, ChatMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, BaseMessage, ChatMessage, ToolMessage } from "@langchain/core/messages";
 import { StateGraph, MessagesAnnotation, START, END, Annotation } from '@langchain/langgraph';
 import { ChatPromptTemplate } from '@langchain/core/prompts'
 import { ToolNode } from '@langchain/langgraph/prebuilt';
@@ -43,11 +43,14 @@ export const ollamaEmbeddings = new OllamaEmbeddings({
     // TODO: Change the model instead of using default
 });
 
-const GraphState = Annotation.Root({
-    question: '',
-    generation: '',
-    documents: []
-})
+const model = new ChatOllama({
+    model: 'llama3.1:8b',
+    temperature: 0,
+    keepAlive: "30m"
+});
+
+// Create a temporary variable to store the user's message.
+let userMessage = '';
 
 //--------------------------------MARK: Define Functions for the Nodes--------------------------------
 // Determine whether the LLM should continue on or end the conversation and reply to the user.
@@ -62,7 +65,7 @@ function shouldContinue({ messages }) {
     }
     // Otherwise, we end it here, and reply to the user.
     console.log('No tool call detected - routing back');
-    return "__end__";
+    return "gradeLLMResponse";
 }
 
 // TODO: add a "decision maker" here to decide whether to retrieve from the local database or search online instead.
@@ -77,7 +80,10 @@ async function callModel(state) {
 }
 
 async function getPastConversations({ messages }) {
+    // Get the user's input
     const lastMessage = messages[messages.length - 1];
+    userMessage = lastMessage;
+
     console.log("---GET PAST CONVERSATIONS---");
     try {
         const pg_basepool = createBasePool("database-atlantis");
@@ -106,7 +112,7 @@ async function getPastConversations({ messages }) {
 
         const filteredDocs = await gradeDocuments(searchResults, lastMessage.content);
 
-        messages.push(new ChatMessage(filteredDocs.join('\n\n')));
+        messages.push(new ToolMessage(`Here are some potentially relevant past conversations from long ago. Use them at your own discretion, and ensure that they are relevant before using this information as context. ${filteredDocs.join('\n\n')}`));
 
         return { messages: messages };
 
@@ -119,14 +125,8 @@ async function getPastConversations({ messages }) {
 }
 
 async function gradeDocuments(documents, question) {
-    console.log("---CHECK RELEVANCY---");
+    console.log("---GRADING: DOCUMENT RELEVANCE---");
     console.log(`Question: ${question}`);
-
-    const model = new ChatOllama({
-        model: 'llama3.1:8b',
-        temperature: 0,
-        keepAlive: "30m"
-    });
 
     // Create a specialised llm to check relevancy of the documents retrieved
     const llmWithTool = model.withStructuredOutput(
@@ -146,14 +146,15 @@ async function gradeDocuments(documents, question) {
 
     const prompt = ChatPromptTemplate.fromTemplate(
         `You are a grader assessing relevance of a retrieved document to a user question.
-      Here is the retrieved document:
-      
-      {context}
-      
-      Here is the user question: {question}
-    
-      If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant.
-      Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.`
+        Do consider the similarity score of the document when grading.
+        Here is the retrieved document:
+        
+        {context}
+        
+        Here is the user question: {question}
+
+        If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant.
+        Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.`
     );
 
     const chain = prompt.pipe(llmWithTool);
@@ -161,7 +162,7 @@ async function gradeDocuments(documents, question) {
     const filteredDocs = [];
     for await (const [doc, score] of documents) {
         const grade = await chain.invoke({
-            context: doc.pageContent,
+            context: `[Similarity Score: ${score}] ${doc.pageContent}`,
             question: question,
         });
         if (grade.binaryScore === "yes") {
@@ -183,12 +184,55 @@ async function gradeDocuments(documents, question) {
 
 }
 
-async function checkRelevantConvoHistory(state) {
-    console.log("---CHECKING CONVO HISTORY---");
-    const filteredDocs = await gradeDocuments(state.pastMessages, state.question);
+async function gradeGenerationResult({ messages }) {
+    console.log(`---GRADING: GENERATION RESULT---`);
 
-    return {
-        messages: [new ChatMessage(filteredDocs.join('\n\n'))],
+    const lastMessage = messages[messages.length-1];
+    console.log(`Message: ${lastMessage.content}`);
+
+    const llmWithTool = model.withStructuredOutput(
+        z
+          .object({
+            binaryScore: z
+              .enum(["yes", "no"])
+              .describe("Relevance score 'yes' or 'no'"),
+          })
+          .describe(
+            "Grade the relevance of the retrieved documents to the question. Either 'yes' or 'no'."
+          ),
+        {
+            name: "grade",
+        }
+    );
+
+    const answerGraderPrompt = ChatPromptTemplate.fromTemplate(
+        `You are a grader assessing relevance of a generated response to a user's message.
+      Here is the generated response:
+      
+      {generation}
+      
+      Here is the user's message: {question}
+    
+      If the document contains keyword(s) or semantic meaning related to the user message, grade it as relevant.
+      Give a binary score 'yes' or 'no' score to indicate whether the response is relevant to the user's message.`
+    );
+
+    const chain = answerGraderPrompt.pipe(llmWithTool);
+    // Invoke the chain and deconstruct binaryScore from the result.
+    const { binaryScore } = await chain.invoke({
+        generation: lastMessage.content,
+        question: userMessage,
+    });
+
+    if (binaryScore === "yes") {
+        console.log('Text generated is relevant; Ending...');
+        return "__end__";
+    } else {
+        // If irrelevant, wipe previous data and regenerate.
+        console.log('Irrelevant response; Regenerating...');
+        messages.push(new HumanMessage(`Please regenerate a better response.`))
+
+        return "agent";
     }
 }
 
@@ -200,10 +244,14 @@ const workflow = new StateGraph(MessagesAnnotation)
     .addNode("getPastConvo", getPastConversations)
     .addNode("agent", callModel)
     .addNode("tools", toolNode)
+    .addNode("gradeLLMResponse", async ({ messages }) => {
+        return { messages: messages };
+    })
     .addEdge("__start__", "getPastConvo")
     .addEdge("getPastConvo", "agent")
-    .addConditionalEdges("agent", shouldContinue, ["tools", "__end__"])
-    .addEdge("tools", "agent");
+    .addConditionalEdges("agent", shouldContinue, ["tools", "gradeLLMResponse"])
+    .addEdge("tools", "agent")
+    .addConditionalEdges("gradeLLMResponse", gradeGenerationResult, ["__end__", "agent"]);
 
 export const defaultWorkflow = workflow.compile({
     checkpointer,
