@@ -40,6 +40,7 @@ export const ollama = new ChatOllama({
 export const ollamaEmbeddings = new OllamaEmbeddings({
     baseUrl: `http://${envconfig.endpoint}:11434`,
     keepAlive: -1
+    // TOOD: Change the model instead of using default
 });
 
 // Define some functions
