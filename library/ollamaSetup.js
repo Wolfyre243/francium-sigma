@@ -44,6 +44,7 @@ export const ollamaEmbeddings = new OllamaEmbeddings({
 });
 
 const model = new ChatOllama({
+    baseUrl: `http://${envconfig.endpoint}:11434`,
     model: 'llama3.1:8b',
     temperature: 0,
 });
@@ -117,6 +118,7 @@ async function gradeDocuments(documents, question) {
     // Create a specialised llm to check relevancy of the documents retrieved
 
     const model = new ChatOllama({
+        baseUrl: `http://${envconfig.endpoint}:11434`,
         model: 'llama3.1:8b',
         temperature: 0,
     });
@@ -183,6 +185,7 @@ async function gradeGenerationResult({ messages }) {
     console.log(`Message: ${lastMessage.content}`);
 
     const model = new ChatOllama({
+        baseUrl: `http://${envconfig.endpoint}:11434`,
         model: 'llama3.1:8b',
         temperature: 0,
     });
@@ -239,6 +242,7 @@ async function shouldRetrievePastConvo({ messages }) {
     console.log("---SHOULD RETRIEVE PAST CONVO---");
 
     const model = new ChatOllama({
+        baseUrl: `http://${envconfig.endpoint}:11434`,
         model: 'llama3.1:8b',
         temperature: 0,
     });
