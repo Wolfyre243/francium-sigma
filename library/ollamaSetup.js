@@ -3,7 +3,7 @@
 import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama';
 import { AIMessage, HumanMessage, BaseMessage, ChatMessage, ToolMessage } from "@langchain/core/messages";
 import { StateGraph, MessagesAnnotation, START, END, Annotation } from '@langchain/langgraph';
-import { ChatPromptTemplate } from '@langchain/core/prompts'
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts'
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 
 // Hugging Face dependencies
@@ -35,7 +35,7 @@ export const ollama = new ChatOllama({
     baseUrl: `http://${envconfig.endpoint}:11434`,
     model: 'aegis:v0.6',
     keepAlive: -1
-}).bindTools(tools);
+});
 
 export const ollamaEmbeddings = new OllamaEmbeddings({
     baseUrl: `http://${envconfig.endpoint}:11434`,
@@ -46,8 +46,9 @@ export const ollamaEmbeddings = new OllamaEmbeddings({
 const model = new ChatOllama({
     model: 'llama3.1:8b',
     temperature: 0,
-    keepAlive: "30m"
 });
+
+const toolModel = model.bindTools(tools);
 
 // Create a temporary variable to store the user's message.
 let userMessage = '';
@@ -65,7 +66,7 @@ function shouldContinue({ messages }) {
     }
     // Otherwise, we end it here, and reply to the user.
     console.log('No tool call detected - routing back');
-    return "gradeLLMResponse";
+    return "removeExcess";
 }
 
 // TODO: add a "decision maker" here to decide whether to retrieve from the local database or search online instead.
@@ -81,8 +82,8 @@ async function callModel(state) {
 
 async function getPastConversations({ messages }) {
     // Get the user's input
-    const lastMessage = messages[messages.length - 1];
-    userMessage = lastMessage;
+    // const lastMessage = messages[messages.length - 1];
+    // userMessage = lastMessage;
 
     console.log("---GET PAST CONVERSATIONS---");
     try {
@@ -90,33 +91,18 @@ async function getPastConversations({ messages }) {
         const pgvectorConvoStore = await PGVectorStore.initialize(ollamaEmbeddings, createPGConvoConfig(pg_basepool));
         
         const searchResults = await pgvectorConvoStore.similaritySearchWithScore(
-            lastMessage.content,
+            userMessage,
             5
         );
-
-        // const relevantConversations = searchResults.map(doc => doc.pageContent + '\n');
-        // TODO: add how long ago the messages were sent here
-        // const today = new Date(Date.now())
-        // let relevantConversations = '';
-        // for (const [doc, score] of searchResults) {
-        //     const timeDiff = Math.floor((today-doc.metadata.date) / 1000 / 60 / 60 / 24)
-        //     relevantConversations += `{
-        //     [Similarity score: ${score}]\n
-        //     Messages sent ${timeDiff ? `${timeDiff} day(s) ago.` : 'today.'}\n
-        //     ${doc.pageContent}
-        //     },\n\n`;
-        // }
         
         console.log("Finished querying message history table!");
         pg_basepool.end();
 
-        const filteredDocs = await gradeDocuments(searchResults, lastMessage.content);
+        const filteredDocs = await gradeDocuments(searchResults, userMessage);
 
         messages.push(new ToolMessage(`Here are some potentially relevant past conversations from long ago. Use them at your own discretion, and ensure that they are relevant before using this information as context. ${filteredDocs.join('\n\n')}`));
 
         return { messages: messages };
-
-        // messages.push(new ChatMessage(`Here are some potentially relevant past conversations from long ago; take them with a grain of salt, as they are not necessarily useful. Please ensure that the information provided here is relevant before using them as context:\n\n${relevantConversations}`))
     
     } catch (error) {
         console.log(error);
@@ -129,6 +115,12 @@ async function gradeDocuments(documents, question) {
     console.log(`Question: ${question}`);
 
     // Create a specialised llm to check relevancy of the documents retrieved
+
+    const model = new ChatOllama({
+        model: 'llama3.1:8b',
+        temperature: 0,
+    });
+
     const llmWithTool = model.withStructuredOutput(
         z
           .object({
@@ -190,6 +182,11 @@ async function gradeGenerationResult({ messages }) {
     const lastMessage = messages[messages.length-1];
     console.log(`Message: ${lastMessage.content}`);
 
+    const model = new ChatOllama({
+        model: 'llama3.1:8b',
+        temperature: 0,
+    });
+
     const llmWithTool = model.withStructuredOutput(
         z
           .object({
@@ -198,7 +195,7 @@ async function gradeGenerationResult({ messages }) {
               .describe("Relevance score 'yes' or 'no'"),
           })
           .describe(
-            "Grade the relevance of the retrieved documents to the question. Either 'yes' or 'no'."
+            "Grade the relevance of the generated response to the question. Either 'yes' or 'no'."
           ),
         {
             name: "grade",
@@ -207,14 +204,15 @@ async function gradeGenerationResult({ messages }) {
 
     const answerGraderPrompt = ChatPromptTemplate.fromTemplate(
         `You are a grader assessing relevance of a generated response to a user's message.
-      Here is the generated response:
-      
-      {generation}
-      
-      Here is the user's message: {question}
-    
-      If the document contains keyword(s) or semantic meaning related to the user message, grade it as relevant.
-      Give a binary score 'yes' or 'no' score to indicate whether the response is relevant to the user's message.`
+        Try to be more lenient and only grade completely irrelevant documents as 'no'.
+        Here is the generated response:
+        
+        {generation}
+        
+        Here is the user's message: {question}
+        
+        If the document contains keyword(s) or semantic meaning related to the user message, grade it as relevant.
+        Give a binary score 'yes' or 'no' score to indicate whether the response is relevant to the user's message.`
     );
 
     const chain = answerGraderPrompt.pipe(llmWithTool);
@@ -230,28 +228,98 @@ async function gradeGenerationResult({ messages }) {
     } else {
         // If irrelevant, wipe previous data and regenerate.
         console.log('Irrelevant response; Regenerating...');
-        messages.push(new HumanMessage(`Please regenerate a better response.`))
+        messages.push(new ToolMessage(`Generated response was irrelevant. Try again.`))
 
         return "agent";
     }
 }
 
-//-------------------------------------MARK: The Actual Graph-------------------------------------------
+async function shouldRetrievePastConvo({ messages }) {
+    // const members = ['web_search', 'internal_database', 'no_retrieval'];
+    console.log("---SHOULD RETRIEVE PAST CONVO---");
+
+    const model = new ChatOllama({
+        model: 'llama3.1:8b',
+        temperature: 0,
+    });
+
+    const prompt = ChatPromptTemplate.fromTemplate(
+        `You are a grader assessing the need to retrieve past memories from a long time ago.
+        Determine whether the conversation requires a memory, based on the user's message,
+        and respond with either 'yes' or 'no', to indicate whether past memories need to be retrieved.
+
+        Here is the user's message:
+        {message}
+        
+        If the messages implies something that happened some time ago, indicate that a memory retrieval is needed.
+        Give a binary score 'yes' or 'no' score to indicate whether past memories need to be retrieved.`
+    );
+
+    const llmWithTool = model.withStructuredOutput(
+        z
+            .object({
+            binaryScore: z
+                .enum(["yes", "no"])
+                .describe("Need for past memory retrieval 'yes' or 'no'"),
+            })
+            .describe(
+            "Grade the need to retrieve past memories from a database. Either 'yes' or 'no'."
+            ),
+        {
+            name: "grade",
+        }
+    );
+
+    const supervisorChain = prompt.pipe(llmWithTool);
+
+    const supervisorChoice = await supervisorChain.invoke({
+        message: userMessage,
+    });
+    console.log(supervisorChoice.binaryScore);
+    
+    if (supervisorChoice.binaryScore === "yes") {
+        return "getPastConvo";
+    } else {
+        return "toolAgent"
+    }
+}
+
 // TODO: Use a different model to determine whether or not to call a tool.
+// This model will help decide whether or not to call a tool
+async function callToolModel({ messages }) {
+    console.log("---DETERMINING WHETHER TO CALL TOOLS---")
+
+    const response = await toolModel.invoke(messages);
+    return { messages: [response] };
+}
+
+//-------------------------------------MARK: The Actual Graph-------------------------------------------
+
 // Basically seperate the tool calling from the generative LLM.
 // Continue invoking tools where necessary.
-const workflow = new StateGraph(MessagesAnnotation)
-    .addNode("getPastConvo", getPastConversations)
-    .addNode("agent", callModel)
-    .addNode("tools", toolNode)
-    .addNode("gradeLLMResponse", async ({ messages }) => {
+const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, implement TS first.
+    // TODO: Add a supervisor to determine next course of action
+    .addNode("getInitialUserMessage", async ({ messages }) => {
+        userMessage = messages[messages.length - 1].content;
+        console.log(userMessage);
         return { messages: messages };
     })
-    .addEdge("__start__", "getPastConvo")
-    .addEdge("getPastConvo", "agent")
-    .addConditionalEdges("agent", shouldContinue, ["tools", "gradeLLMResponse"])
-    .addEdge("tools", "agent")
-    .addConditionalEdges("gradeLLMResponse", gradeGenerationResult, ["__end__", "agent"]);
+    .addNode("getPastConvo", getPastConversations)
+    .addNode("generate", callModel)
+    .addNode("toolAgent", callToolModel)
+    .addNode("tools", toolNode)
+    .addNode("removeExcess", async ({ messages }) => {
+        messages.pop();
+        return { messages: messages };
+    })
+    // Add Edges to the graph.
+    .addEdge("__start__", "getInitialUserMessage")
+    .addConditionalEdges("getInitialUserMessage", shouldRetrievePastConvo, ["getPastConvo", "toolAgent"])
+    .addEdge("getPastConvo", "toolAgent")
+    .addConditionalEdges("toolAgent", shouldContinue, ["tools", "removeExcess"])
+    .addEdge("tools", "toolAgent")
+    .addEdge("removeExcess", "generate")
+    .addConditionalEdges("generate", gradeGenerationResult, ["__end__", "generate"]);
 
 export const defaultWorkflow = workflow.compile({
     checkpointer,
