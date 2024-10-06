@@ -284,7 +284,6 @@ async function shouldRetrievePastConvo({ messages }) {
     }
 }
 
-// TODO: Use a different model to determine whether or not to call a tool.
 // This model will help decide whether or not to call a tool
 async function callToolModel({ messages }) {
     console.log("---DETERMINING WHETHER TO CALL TOOLS---")
@@ -298,7 +297,6 @@ async function callToolModel({ messages }) {
 // Basically seperate the tool calling from the generative LLM.
 // Continue invoking tools where necessary.
 const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, implement TS first.
-    // TODO: Add a supervisor to determine next course of action
     .addNode("getInitialUserMessage", async ({ messages }) => {
         userMessage = messages[messages.length - 1].content;
         console.log(userMessage);
