@@ -4,6 +4,8 @@ import { SearxngSearch } from '@langchain/community/tools/searxng_search';
 
 import envconfig from '../secrets/env-config.json' with { type: "json" };
 
+// TODO: Implement better webpage parsing and summarisation
+
 const langSearchTool = new SearxngSearch({
     apiBase: `http://${envconfig.endpoint}:4040`,
     params: {
