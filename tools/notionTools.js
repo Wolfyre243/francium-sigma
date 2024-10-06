@@ -75,7 +75,7 @@ async function parsePageContent(page) {
         ''
     );
 
-    pageContent += `Page Title: ${pageTitle}\nTags: ${pageTags}\nContent:\n`;
+    pageContent += `${pageTitle}\nTags: ${pageTags}\nContent:\n`;
 
     // Fetch page blocks
     const pageBlocks = await notionClient.blocks.children.list({
@@ -109,11 +109,13 @@ export const fetchUpcomingEventsTool = tool(
             resultPages = await queryTodoDatabase(notionTodoDatabaseId, nextWeekFilter);
         }
         // Parse the content of each page
+        let totalContent = '';
+        let count = 1;
         for (const page of resultPages.results) {
             const content = await parsePageContent(page);
-            console.log(`Parsed page ${content}`);
+            totalContent += count++ + content;
         }
-
+        return `Upcoming events ${ timescope === "this_week" ? 'this week' : 'next week' }:\n\n${totalContent}`
     }, {
         name: "Fetch Events Tool",
         description: "A tool to fetch upcoming events occurring either this week or next week",

@@ -22,12 +22,13 @@ const checkpointer = new MemorySaver();
 import { calculatorTool } from  '../tools/calculatorTool.js';
 import { todoToolkit } from  '../tools/todoTool.js';
 import { searchTool } from   '../tools/searchTools.js';
+import { fetchUpcomingEventsTool } from '../tools/notionTools.js';
 
 // Import extra stuff
 import envconfig from '../secrets/env-config.json' with { type: "json" };
 
 // Set up the tools
-let tools = [calculatorTool, todoToolkit, searchTool];
+let tools = [calculatorTool, todoToolkit, searchTool, fetchUpcomingEventsTool];
 tools = tools.flat();
 const toolNode = new ToolNode(tools);
 
