@@ -16,7 +16,7 @@ const langSearchTool = new SearxngSearch({
 })
 
 export const searchTool = langSearchTool.asTool({
-    description: "A tool that allows you to access the internet and fetch results from all over the web.",
+    description: "Use to surf the web, fetch current information, check the weather, and retrieve other information.",
     name: "searchTool",
     schema: langSearchTool.schema,
 })

@@ -4,7 +4,9 @@ import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama';
 import { AIMessage, HumanMessage, BaseMessage, ChatMessage, ToolMessage } from "@langchain/core/messages";
 import { StateGraph, MessagesAnnotation, START, END, Annotation } from '@langchain/langgraph';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts'
+import { StringOutputParser } from  '@langchain/core/output_parsers';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { SearxngSearch } from '@langchain/community/tools/searxng_search';
 
 // Hugging Face dependencies
 import { pipeline } from '@xenova/transformers';
@@ -28,7 +30,7 @@ import { fetchUpcomingEventsTool } from '../tools/notionTools.js';
 import envconfig from '../secrets/env-config.json' with { type: "json" };
 
 // Set up the tools
-let tools = [calculatorTool, todoToolkit, searchTool, fetchUpcomingEventsTool];
+let tools = [calculatorTool, todoToolkit, fetchUpcomingEventsTool];
 tools = tools.flat();
 const toolNode = new ToolNode(tools);
 
@@ -51,6 +53,13 @@ const model = new ChatOllama({
 });
 
 const toolModel = model.bindTools(tools);
+const searchModel = model.bindTools([searchTool]);
+
+const vanillaModel = new ChatOllama({
+    baseUrl: `http://${envconfig.endpoint}:11434`,
+    model: 'llama3.1:8b',
+    temperature: 0,
+});
 
 // Create a temporary variable to store the user's message.
 let userMessage = '';
@@ -64,11 +73,11 @@ function shouldContinue({ messages }) {
     // If LLM made a tool call, we route to the "tools" node.
     if (lastMessage.tool_calls.length != 0) {
         console.log('Tool call detected - routing to tools node');
-        return "tools";
+        return "continue";
     }
     // Otherwise, we end it here, and reply to the user.
     console.log('No tool call detected - routing back');
-    return "removeExcess";
+    return "end";
 }
 
 // TODO: add a "decision maker" here to decide whether to retrieve from the local database or search online instead.
@@ -80,6 +89,30 @@ async function callModel(state) {
 
     const response = await ollama.invoke(state.messages);
     return { messages: [response] };
+}
+
+async function promptRewriter({ messages} ) {
+    const rewriterPrompt = ChatPromptTemplate.fromTemplate(
+        `You a question re-writer that converts an input question to a better version that is optimized
+        for vectorstore retrieval. Look at the initial and formulate an improved question.
+
+        Here is the initial question:
+
+        <question>
+        {question}
+        </question>
+
+        Respond only with an improved question. Do not include any preamble or explanation.`
+    );
+
+    const rewriter = rewriterPrompt.pipe(vanillaModel).pipe(new StringOutputParser());
+    const response = await rewriter.invoke({
+        question: userMessage
+    });
+    console.log(response);
+    userMessage = response;
+
+    return { messages: messages };
 }
 
 async function getPastConversations({ messages }) {
@@ -234,7 +267,7 @@ async function gradeGenerationResult({ messages }) {
         console.log('Irrelevant response; Regenerating...');
         messages.push(new ToolMessage(`Generated response was irrelevant. Try again.`))
 
-        return "agent";
+        return "generate";
     }
 }
 
@@ -283,9 +316,9 @@ async function shouldRetrievePastConvo({ messages }) {
     console.log(supervisorChoice.binaryScore);
     
     if (supervisorChoice.binaryScore === "yes") {
-        return "getPastConvo";
+        return "continue";
     } else {
-        return "toolAgent"
+        return "end"
     }
 }
 
@@ -294,6 +327,17 @@ async function callToolModel({ messages }) {
     console.log("---DETERMINING WHETHER TO CALL TOOLS---")
 
     const response = await toolModel.invoke(messages);
+    console.log(response);
+    return { messages: [response] };
+}
+
+// This function will help to fetch web search results, and parse them.
+async function webSearch({ messages }) {
+    console.log("---WEB SEARCH---");
+    
+
+    const response = await searchModel.invoke(messages);
+
     return { messages: [response] };
 }
 
@@ -307,8 +351,10 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
         console.log(userMessage);
         return { messages: messages };
     })
+    .addNode("rewriter", promptRewriter)
     .addNode("getPastConvo", getPastConversations)
     .addNode("generate", callModel)
+    .addNode("searchTool", webSearch)
     .addNode("toolAgent", callToolModel)
     .addNode("tools", toolNode)
     .addNode("removeExcess", async ({ messages }) => {
@@ -317,9 +363,16 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
     })
     // Add Edges to the graph.
     .addEdge("__start__", "getInitialUserMessage")
-    .addConditionalEdges("getInitialUserMessage", shouldRetrievePastConvo, ["getPastConvo", "toolAgent"])
-    .addEdge("getPastConvo", "toolAgent")
-    .addConditionalEdges("toolAgent", shouldContinue, ["tools", "removeExcess"])
+    .addEdge("getInitialUserMessage", "rewriter")
+    // TODO: Create "memories" instead of storing the entire convo
+    .addConditionalEdges("rewriter", shouldRetrievePastConvo, { continue: "getPastConvo", end: "searchTool"})
+    // Fetch local information before going to the web
+    // Seperate web search as a node, instead of a tool
+    .addEdge("getPastConvo", "searchTool")
+    // TODO: Use a mapping to change routes instead of hardcoding the name
+    .addConditionalEdges("searchTool", shouldContinue, { continue: "tools", end: "toolAgent"})
+    .addEdge("tools", "searchTool")
+    .addConditionalEdges("toolAgent", shouldContinue, { continue: "tools", end: "removeExcess"})
     .addEdge("tools", "toolAgent")
     .addEdge("removeExcess", "generate")
     .addConditionalEdges("generate", gradeGenerationResult, ["__end__", "generate"]);
