@@ -23,7 +23,7 @@ const checkpointer = new MemorySaver();
 // Import Tools for the LLM to use
 import { calculatorTool } from  '../tools/calculatorTool.js';
 import { todoToolkit } from  '../tools/todoTool.js';
-import { searchTool } from   '../tools/searchTools.js';
+import { searchTool, langSearchTool } from   '../tools/searchTools.js';
 import { fetchUpcomingEventsTool } from '../tools/notionTools.js';
 
 // Import extra stuff
@@ -332,13 +332,81 @@ async function callToolModel({ messages }) {
 }
 
 // This function will help to fetch web search results, and parse them.
-async function webSearch({ messages }) {
-    console.log("---WEB SEARCH---");
+async function webSearch() {
+    const webSearchPrompt = ChatPromptTemplate.fromTemplate(
+        `You are a researcher that is capable of surfing the internet for external background information.
+        Based on the user's message, generate a clean and simple search query to be used in the 
+        search engine. 
+        
+        Here is the user's message:
+
+        <message>
+        {message}
+        </message>
+
+        Respond only with an improved search query. Do not include any preamble or explanation.
+        `
+    )
+
+    const searchChain = webSearchPrompt.pipe(vanillaModel).pipe(new StringOutputParser());
+    const query = await searchChain.invoke({
+        message: userMessage
+    })
+    console.log(query);
+
+    const responseArr = await langSearchTool.invoke({
+        input: query,
+    });
+    console.log(responseArr);
+
+    // TODO: Add web document parsing here
+    return responseArr;
+}
+
+async function shouldSearchWeb({ messages }) {
+    console.log("---SHOULD DO WEB SEARCH---")
+    const prompt = ChatPromptTemplate.fromTemplate(
+        `You are a grader assessing the need to retrieve information from the internet, based on the user's message.
+        Determine whether the conversation requires external information from the web, based on the user's message,
+        and respond with either 'yes' or 'no', to indicate whether a web search is required.
+
+        Here is the user's message:
+        {message}
+        
+        If the messages implies something that happened some time ago, indicate that a web search is needed.
+        Give a binary score 'yes' or 'no' score to indicate whether a web search is required.`
+    );
+
+    const llmWithTool = vanillaModel.withStructuredOutput(
+        z
+            .object({
+            binaryScore: z
+                .enum(["yes", "no"])
+                .describe("Need for a web search, 'yes' or 'no'."),
+            })
+            .describe(
+            "Grade the need to retrieve external information from the web. Either 'yes' or 'no'."
+            ),
+        {
+            name: "grade",
+        }
+    );
+
+    const searchChain = prompt.pipe(llmWithTool);
+
+    const searchChoice = await searchChain.invoke({
+        message: userMessage
+    });
     
-
-    const response = await searchModel.invoke(messages);
-
-    return { messages: [response] };
+    if (searchChoice.binaryScore === "yes") {
+        console.log("---WEB SEARCH---");
+        const responses = await webSearch();
+        messages.push(new ToolMessage(`Here are some results from a web search: ${responses}`));
+        return { messages: messages };
+    } else {
+        console.log("---NO WEB SEARCH---");
+        return { messages: messages };
+    }
 }
 
 //-------------------------------------MARK: The Actual Graph-------------------------------------------
@@ -351,10 +419,10 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
         console.log(userMessage);
         return { messages: messages };
     })
-    .addNode("rewriter", promptRewriter)
+    // .addNode("rewriter", promptRewriter)
     .addNode("getPastConvo", getPastConversations)
     .addNode("generate", callModel)
-    .addNode("searchTool", webSearch)
+    .addNode("searchTool", shouldSearchWeb)
     .addNode("toolAgent", callToolModel)
     .addNode("tools", toolNode)
     .addNode("removeExcess", async ({ messages }) => {
@@ -363,19 +431,22 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
     })
     // Add Edges to the graph.
     .addEdge("__start__", "getInitialUserMessage")
-    .addEdge("getInitialUserMessage", "rewriter")
+    // .addEdge("getInitialUserMessage", "rewriter")
     // TODO: Create "memories" instead of storing the entire convo
-    .addConditionalEdges("rewriter", shouldRetrievePastConvo, { continue: "getPastConvo", end: "searchTool"})
+    .addConditionalEdges("getInitialUserMessage", shouldRetrievePastConvo, { continue: "getPastConvo", end: "searchTool"})
     // Fetch local information before going to the web
     // Seperate web search as a node, instead of a tool
     .addEdge("getPastConvo", "searchTool")
     // TODO: Use a mapping to change routes instead of hardcoding the name
-    .addConditionalEdges("searchTool", shouldContinue, { continue: "tools", end: "toolAgent"})
-    .addEdge("tools", "searchTool")
+    // .addConditionalEdges("searchTool", shouldContinue, { continue: "tools", end: "toolAgent"})
+    // .addEdge("tools", "searchTool")
+    .addEdge("searchTool", "toolAgent")
     .addConditionalEdges("toolAgent", shouldContinue, { continue: "tools", end: "removeExcess"})
     .addEdge("tools", "toolAgent")
     .addEdge("removeExcess", "generate")
-    .addConditionalEdges("generate", gradeGenerationResult, ["__end__", "generate"]);
+    // Temporarily disabled self-reflection
+    // .addConditionalEdges("generate", gradeGenerationResult, ["__end__", "generate"]);
+    .addEdge("generate", "__end__")
 
 export const defaultWorkflow = workflow.compile({
     checkpointer,
