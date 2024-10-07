@@ -36,7 +36,7 @@ const toolNode = new ToolNode(tools);
 
 export const ollama = new ChatOllama({
     baseUrl: `http://${envconfig.endpoint}:11434`,
-    model: 'aegis:v0.6',
+    model: 'aegis:v0.7',
     keepAlive: -1
 });
 
@@ -431,15 +431,11 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
     })
     // Add Edges to the graph.
     .addEdge("__start__", "getInitialUserMessage")
-    // .addEdge("getInitialUserMessage", "rewriter")
     // TODO: Create "memories" instead of storing the entire convo
     .addConditionalEdges("getInitialUserMessage", shouldRetrievePastConvo, { continue: "getPastConvo", end: "searchTool"})
     // Fetch local information before going to the web
     // Seperate web search as a node, instead of a tool
     .addEdge("getPastConvo", "searchTool")
-    // TODO: Use a mapping to change routes instead of hardcoding the name
-    // .addConditionalEdges("searchTool", shouldContinue, { continue: "tools", end: "toolAgent"})
-    // .addEdge("tools", "searchTool")
     .addEdge("searchTool", "toolAgent")
     .addConditionalEdges("toolAgent", shouldContinue, { continue: "tools", end: "removeExcess"})
     .addEdge("tools", "toolAgent")
