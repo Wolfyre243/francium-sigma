@@ -13,11 +13,11 @@ export const createBasePool = (database) => {
 }
 
 // For communicating with the Documents table.
-export const createPGDocumentConfig = (pool) => {
+export const createPGDocumentConfig = (pool, tablename) => {
     return {
         pool: pool,
-        tableName: "simpleDocuments", // This is a table that stores documents, all configured below in the "columns" object.
-        collectionName: "documents_collection",
+        tableName: tablename, // This is a table that stores documents, all configured below in the "columns" object.
+        collectionName: tablename + "_collection",
         collectionTableName: "collections", // This is a table that stores the collection objects
         columns: {
             idColumnName: "id",

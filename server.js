@@ -1,6 +1,7 @@
 import express from 'express';
 import francRouter from './routes/francium.js';
 import TTSRouter from './routes/texttospeech.js';
+import uploadRouter from './routes/upload.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -17,6 +18,7 @@ app.get('/', (req, res) => {
 app.use(express.json());
 app.use('/francium', francRouter)
 app.use('/texttospeech', TTSRouter)
+app.use('/upload', uploadRouter)
 
 app.listen(3030);
 

@@ -7,6 +7,7 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
 import { StringOutputParser } from  '@langchain/core/output_parsers';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { SearxngSearch } from '@langchain/community/tools/searxng_search';
+import { EnsembleRetriever } from "langchain/retrievers/ensemble";
 
 // Hugging Face dependencies
 import { pipeline } from '@xenova/transformers';
@@ -133,7 +134,7 @@ async function getPastConversations({ messages }) {
         console.log("Finished querying message history table!");
         pg_basepool.end();
 
-        const filteredDocs = await gradeDocuments(searchResults, userMessage);
+        const filteredDocs = await gradeMessages(searchResults, userMessage);
 
         messages.push(new ToolMessage(`Here are some potentially relevant past conversations from long ago. Use them at your own discretion, and ensure that they are relevant before using this information as context. ${filteredDocs.join('\n\n')}`));
 
@@ -145,7 +146,7 @@ async function getPastConversations({ messages }) {
     }
 }
 
-async function gradeDocuments(documents, question) {
+async function gradeMessages(documents, question) {
     console.log("---GRADING: DOCUMENT RELEVANCE---");
     console.log(`Question: ${question}`);
 
@@ -373,7 +374,7 @@ async function shouldSearchWeb({ messages }) {
         Here is the user's message:
         {message}
         
-        If the messages implies something that happened some time ago, indicate that a web search is needed.
+        If the message is asking for external information, indicate that a web search is needed.
         Give a binary score 'yes' or 'no' score to indicate whether a web search is required.`
     );
 
@@ -409,6 +410,167 @@ async function shouldSearchWeb({ messages }) {
     }
 }
 
+async function gradeDocuments(documents, question) {
+    console.log("---GRADING: DOCUMENT RELEVANCE---");
+    console.log(`Question: ${question}`);
+
+    // Create a specialised llm to check relevancy of the documents retrieved
+
+    const model = new ChatOllama({
+        baseUrl: `http://${envconfig.endpoint}:11434`,
+        model: 'llama3.1:8b',
+        temperature: 0,
+    });
+
+    const llmWithTool = model.withStructuredOutput(
+        z
+          .object({
+            binaryScore: z
+              .enum(["yes", "no"])
+              .describe("Relevance score 'yes' or 'no'"),
+          })
+          .describe(
+            "Grade the relevance of the retrieved documents to the question. Either 'yes' or 'no'."
+          ),
+        {
+            name: "grade",
+        }
+    );
+
+    const prompt = ChatPromptTemplate.fromTemplate(
+        `You are a grader assessing relevance of a retrieved document to a user question.
+        Here is the retrieved document:
+        
+        {context}
+        
+        Here is the user question: {question}
+
+        If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant.
+        Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.`
+    );
+
+    const chain = prompt.pipe(llmWithTool);
+
+    const filteredDocs = [];
+    for await (const doc of documents) {
+        const grade = await chain.invoke({
+            context: `${doc.pageContent}`,
+            question: question,
+        });
+        if (grade.binaryScore === "yes") {
+            console.log("---GRADE: RELEVANT DOCUMENT---");
+            filteredDocs.push(`{
+                Source: ${doc.metadata.filename}
+                ${doc.pageContent}
+                },\n\n`
+            );
+        } else {
+            console.log("---GRADE: DOCUMENT NOT RELEVANT---");
+        }
+    }
+
+    return filteredDocs;
+
+}
+
+async function retrieveDocuments({ messages }) {
+    console.log("---SHOULD RETRIEVE DOCUMENTS---");
+
+    // Decide whether to retrieve info
+    const prompt = ChatPromptTemplate.fromTemplate(
+        `You are a researcher assessing the need to retrieve information from a local knowledge base, based on the user's message.
+        Determine whether the conversation requires external information from the knowledge base, based on the user's message,
+        and respond with either 'yes' or 'no', to indicate whether retrieval is required.
+
+        Here is the user's message:
+        {message}
+        
+        If the message implies that external knowledge is needed as context, indicate that document retrieval is needed.
+        Give a binary score 'yes' or 'no' score to indicate whether a web search is required.`
+    );
+
+    const llmWithTool = vanillaModel.withStructuredOutput(
+        z
+            .object({
+            binaryScore: z
+                .enum(["yes", "no"])
+                .describe("Need for document retrieval, 'yes' or 'no'."),
+            })
+            .describe(
+            "Grade the need to retrieve external information from the local knowledge base. Either 'yes' or 'no'."
+            ),
+        {
+            name: "grade",
+        }
+    );
+
+    const searchChain = prompt.pipe(llmWithTool);
+
+    const searchChoice = await searchChain.invoke({
+        message: userMessage
+    });
+    
+    if (searchChoice.binaryScore === "yes") {
+        // Create a new query from user's message
+        const queryPrompt = ChatPromptTemplate.fromTemplate(
+            `You are a researcher that is capable of searching databases efficiently for external background information.
+            Based on the user's message, generate a clean and simple search query to be used in the 
+            knowledge base. 
+            
+            Here is the user's message:
+
+            <message>
+            {message}
+            </message>
+
+            Respond only with an improved search query. Do not include any preamble or explanation.
+            `
+        )
+
+        const queryChain = queryPrompt.pipe(vanillaModel).pipe(new StringOutputParser());
+        const query = await queryChain.invoke({
+            message: userMessage
+        })
+
+        console.log("---RETRIEVING DOCUMENTS---");
+        console.log(`Query: ${query}`);
+
+        try {
+            const pg_basepool = createBasePool("database-atlantis");
+            const pgvectorNotesStore = await PGVectorStore.initialize(ollamaEmbeddings, createPGDocumentConfig(pg_basepool, "notes"));
+            const notesRetriever = pgvectorNotesStore.asRetriever({
+                searchType: 'similarity',
+                k: 5,
+            });
+
+            // TODO: Maybe let AI decide which tables + their respective weights
+            const mainRetriever = new EnsembleRetriever({
+                retrievers: [notesRetriever],
+                weights: [1]
+            });
+
+            const retrievedDocs = await mainRetriever.invoke(query);
+            console.log("Finished querying relevant documents!");
+            console.log(retrievedDocs);
+            pg_basepool.end();
+
+            const filteredDocs = await gradeDocuments(retrievedDocs, query);
+            console.log(filteredDocs);
+
+            messages.push(new ToolMessage(`Here are some potentially relevant documents pertaining the user's question. Please further evaluate their relevance before using them as context. ${filteredDocs.join('\n\n')}`));
+            return { messages: messages };
+        
+        } catch (error) {
+            console.log(error);
+            return "Error retrieving documents from database.";
+        }
+
+    } else {
+        console.log("---NO DOCUMENT RETRIEVAL---");
+        return { messages: messages };
+    }
+}
+
 //-------------------------------------MARK: The Actual Graph-------------------------------------------
 
 // Basically seperate the tool calling from the generative LLM.
@@ -422,6 +584,7 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
     // .addNode("rewriter", promptRewriter)
     .addNode("getPastConvo", getPastConversations)
     .addNode("generate", callModel)
+    .addNode("retrieveDocs", retrieveDocuments)
     .addNode("searchTool", shouldSearchWeb)
     .addNode("toolAgent", callToolModel)
     .addNode("tools", toolNode)
@@ -434,9 +597,10 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
     // TODO: Create "memories" instead of storing the entire convo
     .addConditionalEdges("getInitialUserMessage", shouldRetrievePastConvo, { continue: "getPastConvo", end: "searchTool"})
     // Fetch local information before going to the web
-    // Seperate web search as a node, instead of a tool
     .addEdge("getPastConvo", "searchTool")
-    .addEdge("searchTool", "toolAgent")
+    // Retrieve info from local knowledge base
+    .addEdge("searchTool", "retrieveDocs")
+    .addEdge("retrieveDocs", "toolAgent")
     .addConditionalEdges("toolAgent", shouldContinue, { continue: "tools", end: "removeExcess"})
     .addEdge("tools", "toolAgent")
     .addEdge("removeExcess", "generate")
