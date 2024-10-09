@@ -89,6 +89,8 @@ async function callModel(state) {
     console.log("---GENERATE---");
 
     const response = await ollama.invoke(state.messages);
+
+    console.log("---FINISHED GENERATING---");
     return { messages: [response] };
 }
 

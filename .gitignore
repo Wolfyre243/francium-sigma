@@ -5,4 +5,6 @@ ollama_model_storage
 secrets
 ServerStorage
 
+build
+
 output.wav
