@@ -115,7 +115,7 @@ router.post('/', async (req,res) => {
         { messages: [new HumanMessage(req.body.message)] },
         { configurable: { thread_id: "42" } },
     );
-    console.log(finalResult);
+    // console.log(finalResult);
 
     const pg_basepool = createBasePool("database-atlantis");
     const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));

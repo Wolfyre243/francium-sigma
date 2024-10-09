@@ -6,7 +6,7 @@ import envconfig from '../secrets/env-config.json' with { type: "json" };
 
 // TODO: Implement better webpage parsing and summarisation
 
-const langSearchTool = new SearxngSearch({
+export const langSearchTool = new SearxngSearch({
     apiBase: `http://${envconfig.endpoint}:4040`,
     params: {
         format: "json",
@@ -16,7 +16,7 @@ const langSearchTool = new SearxngSearch({
 })
 
 export const searchTool = langSearchTool.asTool({
-    description: "A tool that allows you to access the internet and fetch results from all over the web.",
+    description: "Use to surf the web, fetch current information, check the weather, and retrieve other information.",
     name: "searchTool",
     schema: langSearchTool.schema,
 })

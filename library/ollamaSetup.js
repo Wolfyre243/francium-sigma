@@ -4,7 +4,9 @@ import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama';
 import { AIMessage, HumanMessage, BaseMessage, ChatMessage, ToolMessage } from "@langchain/core/messages";
 import { StateGraph, MessagesAnnotation, START, END, Annotation } from '@langchain/langgraph';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts'
+import { StringOutputParser } from  '@langchain/core/output_parsers';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { SearxngSearch } from '@langchain/community/tools/searxng_search';
 
 // Hugging Face dependencies
 import { pipeline } from '@xenova/transformers';
@@ -21,19 +23,20 @@ const checkpointer = new MemorySaver();
 // Import Tools for the LLM to use
 import { calculatorTool } from  '../tools/calculatorTool.js';
 import { todoToolkit } from  '../tools/todoTool.js';
-import { searchTool } from   '../tools/searchTools.js';
+import { searchTool, langSearchTool } from   '../tools/searchTools.js';
+import { fetchUpcomingEventsTool } from '../tools/notionTools.js';
 
 // Import extra stuff
 import envconfig from '../secrets/env-config.json' with { type: "json" };
 
 // Set up the tools
-let tools = [calculatorTool, todoToolkit, searchTool];
+let tools = [calculatorTool, todoToolkit, fetchUpcomingEventsTool];
 tools = tools.flat();
 const toolNode = new ToolNode(tools);
 
 export const ollama = new ChatOllama({
     baseUrl: `http://${envconfig.endpoint}:11434`,
-    model: 'aegis:v0.6',
+    model: 'aegis:v0.7',
     keepAlive: -1
 });
 
@@ -50,6 +53,13 @@ const model = new ChatOllama({
 });
 
 const toolModel = model.bindTools(tools);
+const searchModel = model.bindTools([searchTool]);
+
+const vanillaModel = new ChatOllama({
+    baseUrl: `http://${envconfig.endpoint}:11434`,
+    model: 'llama3.1:8b',
+    temperature: 0,
+});
 
 // Create a temporary variable to store the user's message.
 let userMessage = '';
@@ -63,11 +73,11 @@ function shouldContinue({ messages }) {
     // If LLM made a tool call, we route to the "tools" node.
     if (lastMessage.tool_calls.length != 0) {
         console.log('Tool call detected - routing to tools node');
-        return "tools";
+        return "continue";
     }
     // Otherwise, we end it here, and reply to the user.
     console.log('No tool call detected - routing back');
-    return "removeExcess";
+    return "end";
 }
 
 // TODO: add a "decision maker" here to decide whether to retrieve from the local database or search online instead.
@@ -79,6 +89,30 @@ async function callModel(state) {
 
     const response = await ollama.invoke(state.messages);
     return { messages: [response] };
+}
+
+async function promptRewriter({ messages} ) {
+    const rewriterPrompt = ChatPromptTemplate.fromTemplate(
+        `You a question re-writer that converts an input question to a better version that is optimized
+        for vectorstore retrieval. Look at the initial and formulate an improved question.
+
+        Here is the initial question:
+
+        <question>
+        {question}
+        </question>
+
+        Respond only with an improved question. Do not include any preamble or explanation.`
+    );
+
+    const rewriter = rewriterPrompt.pipe(vanillaModel).pipe(new StringOutputParser());
+    const response = await rewriter.invoke({
+        question: userMessage
+    });
+    console.log(response);
+    userMessage = response;
+
+    return { messages: messages };
 }
 
 async function getPastConversations({ messages }) {
@@ -233,7 +267,7 @@ async function gradeGenerationResult({ messages }) {
         console.log('Irrelevant response; Regenerating...');
         messages.push(new ToolMessage(`Generated response was irrelevant. Try again.`))
 
-        return "agent";
+        return "generate";
     }
 }
 
@@ -282,9 +316,9 @@ async function shouldRetrievePastConvo({ messages }) {
     console.log(supervisorChoice.binaryScore);
     
     if (supervisorChoice.binaryScore === "yes") {
-        return "getPastConvo";
+        return "continue";
     } else {
-        return "toolAgent"
+        return "end"
     }
 }
 
@@ -293,7 +327,86 @@ async function callToolModel({ messages }) {
     console.log("---DETERMINING WHETHER TO CALL TOOLS---")
 
     const response = await toolModel.invoke(messages);
+    console.log(response);
     return { messages: [response] };
+}
+
+// This function will help to fetch web search results, and parse them.
+async function webSearch() {
+    const webSearchPrompt = ChatPromptTemplate.fromTemplate(
+        `You are a researcher that is capable of surfing the internet for external background information.
+        Based on the user's message, generate a clean and simple search query to be used in the 
+        search engine. 
+        
+        Here is the user's message:
+
+        <message>
+        {message}
+        </message>
+
+        Respond only with an improved search query. Do not include any preamble or explanation.
+        `
+    )
+
+    const searchChain = webSearchPrompt.pipe(vanillaModel).pipe(new StringOutputParser());
+    const query = await searchChain.invoke({
+        message: userMessage
+    })
+    console.log(query);
+
+    const responseArr = await langSearchTool.invoke({
+        input: query,
+    });
+    console.log(responseArr);
+
+    // TODO: Add web document parsing here
+    return responseArr;
+}
+
+async function shouldSearchWeb({ messages }) {
+    console.log("---SHOULD DO WEB SEARCH---")
+    const prompt = ChatPromptTemplate.fromTemplate(
+        `You are a grader assessing the need to retrieve information from the internet, based on the user's message.
+        Determine whether the conversation requires external information from the web, based on the user's message,
+        and respond with either 'yes' or 'no', to indicate whether a web search is required.
+
+        Here is the user's message:
+        {message}
+        
+        If the messages implies something that happened some time ago, indicate that a web search is needed.
+        Give a binary score 'yes' or 'no' score to indicate whether a web search is required.`
+    );
+
+    const llmWithTool = vanillaModel.withStructuredOutput(
+        z
+            .object({
+            binaryScore: z
+                .enum(["yes", "no"])
+                .describe("Need for a web search, 'yes' or 'no'."),
+            })
+            .describe(
+            "Grade the need to retrieve external information from the web. Either 'yes' or 'no'."
+            ),
+        {
+            name: "grade",
+        }
+    );
+
+    const searchChain = prompt.pipe(llmWithTool);
+
+    const searchChoice = await searchChain.invoke({
+        message: userMessage
+    });
+    
+    if (searchChoice.binaryScore === "yes") {
+        console.log("---WEB SEARCH---");
+        const responses = await webSearch();
+        messages.push(new ToolMessage(`Here are some results from a web search: ${responses}`));
+        return { messages: messages };
+    } else {
+        console.log("---NO WEB SEARCH---");
+        return { messages: messages };
+    }
 }
 
 //-------------------------------------MARK: The Actual Graph-------------------------------------------
@@ -306,8 +419,10 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
         console.log(userMessage);
         return { messages: messages };
     })
+    // .addNode("rewriter", promptRewriter)
     .addNode("getPastConvo", getPastConversations)
     .addNode("generate", callModel)
+    .addNode("searchTool", shouldSearchWeb)
     .addNode("toolAgent", callToolModel)
     .addNode("tools", toolNode)
     .addNode("removeExcess", async ({ messages }) => {
@@ -316,12 +431,18 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
     })
     // Add Edges to the graph.
     .addEdge("__start__", "getInitialUserMessage")
-    .addConditionalEdges("getInitialUserMessage", shouldRetrievePastConvo, ["getPastConvo", "toolAgent"])
-    .addEdge("getPastConvo", "toolAgent")
-    .addConditionalEdges("toolAgent", shouldContinue, ["tools", "removeExcess"])
+    // TODO: Create "memories" instead of storing the entire convo
+    .addConditionalEdges("getInitialUserMessage", shouldRetrievePastConvo, { continue: "getPastConvo", end: "searchTool"})
+    // Fetch local information before going to the web
+    // Seperate web search as a node, instead of a tool
+    .addEdge("getPastConvo", "searchTool")
+    .addEdge("searchTool", "toolAgent")
+    .addConditionalEdges("toolAgent", shouldContinue, { continue: "tools", end: "removeExcess"})
     .addEdge("tools", "toolAgent")
     .addEdge("removeExcess", "generate")
-    .addConditionalEdges("generate", gradeGenerationResult, ["__end__", "generate"]);
+    // Temporarily disabled self-reflection
+    // .addConditionalEdges("generate", gradeGenerationResult, ["__end__", "generate"]);
+    .addEdge("generate", "__end__")
 
 export const defaultWorkflow = workflow.compile({
     checkpointer,
