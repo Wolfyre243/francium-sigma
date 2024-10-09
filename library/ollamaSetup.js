@@ -460,7 +460,7 @@ async function gradeDocuments(documents, question) {
         if (grade.binaryScore === "yes") {
             console.log("---GRADE: RELEVANT DOCUMENT---");
             filteredDocs.push(`{
-                Source: ${doc.metadata.source}
+                Source: ${doc.metadata.filename}
                 ${doc.pageContent}
                 },\n\n`
             );
