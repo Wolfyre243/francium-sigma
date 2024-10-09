@@ -3,28 +3,28 @@ import fs from 'fs';
 
 import { SearxngService } from 'searxng';
 
-import readline from 'readline-sync';
+// import readline from 'readline-sync';
 import envconfig from './secrets/env-config.json' with { type: "json" };
 
-while (true) {
+// while (true) {
 
-    const input = readline.question("You\n>> ");
+//     const input = readline.question("You\n>> ");
 
-    const data = await fetch(`http://${envconfig.endpoint}:3030/francium`, {
-        method: "POST",
-        body: JSON.stringify({
-            message: input,
-            context: "bababa"
-        }),
-        headers: {
-            "Content-Type": "application/json"
-        }
-    });
+//     const data = await fetch(`http://${envconfig.endpoint}:3030/francium`, {
+//         method: "POST",
+//         body: JSON.stringify({
+//             message: input,
+//             context: "bababa"
+//         }),
+//         headers: {
+//             "Content-Type": "application/json"
+//         }
+//     });
     
-    const dataJSON = await data.json();
+//     const dataJSON = await data.json();
     
-    console.log("\n", dataJSON.result, "\n");
-}
+//     console.log("\n", dataJSON.result, "\n");
+// }
 
 // const searchConfig = {
 //     baseURL: 'http://localhost:4040',
@@ -48,3 +48,22 @@ while (true) {
 // }
 
 // searchEngine('why is the sky blue?')
+
+const data = await fetch(`http://${envconfig.endpoint}:3030/upload/notes`, {
+    method: "POST",
+    body: JSON.stringify({
+        filename: "Lesson 1 - Advanced JavaScript Part 1_v2.00.pdf",
+        metadata: {
+            date_uploaded: (new Date(Date.now())).toISOString(),
+            tags: ["javascript", "FOP", "programming", "notes"],
+        }
+    }),
+    headers: {
+        "Content-Type": "application/json"
+    }
+});
+
+const dataJSON = await data.json();
+for (const doc of dataJSON.result) {
+    console.log(doc)
+}
