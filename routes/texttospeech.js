@@ -4,7 +4,7 @@ import { pipeline } from "@xenova/transformers";
 
 // Import WAV tools
 import wavefile from 'wavefile';
-import fs from 'fs';
+import fs from 'node:fs';
 
 // Import and define a simple Express.js router
 import express from 'express';

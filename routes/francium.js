@@ -178,6 +178,6 @@ router.get('/pgvector', async (req, res) => {
     } catch (e) {
         console.log(e);
     };
-})
+});
 
 export default router; // This will make the router available in the main app.js file.

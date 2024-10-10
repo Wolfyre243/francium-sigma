@@ -10,8 +10,8 @@ import { createPGDocumentConfig, createBasePool } from '../databasing/database.j
 import { v4 as uuidv4 } from 'uuid';
 
 // Import file rreading tools
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 // import { PPTXLoader } from "@langchain/community/document_loaders/fs/pptx";
 // import pdfjs from 'pdfjs-dist/legacy/build/pdf.js'

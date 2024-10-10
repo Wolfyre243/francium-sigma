@@ -1,6 +1,7 @@
-FROM node:20
+FROM node:latest
 
 # ENV NODE_ENV production
+WORKDIR /home/francium
 
 COPY package*.json ./
 RUN npm install

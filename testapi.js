@@ -1,5 +1,5 @@
 import wavefile from 'wavefile';
-import fs from 'fs';
+import fs from 'node:fs';
 
 import { SearxngService } from 'searxng';
 

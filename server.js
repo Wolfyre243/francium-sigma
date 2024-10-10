@@ -5,6 +5,7 @@ import express from 'express';
 import francRouter from './routes/francium.js';
 import TTSRouter from './routes/texttospeech.js';
 import uploadRouter from './routes/upload.js';
+import APIRouter from './routes/api.js';
 
 const __dirname = import.meta.dirname;
 
@@ -34,9 +35,10 @@ const build = viteDevServer ?
     () => viteDevServer.ssrLoadModule("virtual:remix/server-build")
     : await import("./build/server/index.js");
 
-app.use('/francium', francRouter)
-app.use('/texttospeech', TTSRouter)
-app.use('/upload', uploadRouter)
+// app.use('/francium', francRouter)
+// app.use('/texttospeech', TTSRouter)
+// app.use('/upload', uploadRouter)
+app.use('/api', APIRouter)
 
 app.all("*", createRequestHandler({ build }));
 
