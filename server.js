@@ -7,6 +7,10 @@ import TTSRouter from './routes/texttospeech.js';
 import uploadRouter from './routes/upload.js';
 import APIRouter from './routes/api.js';
 
+// Import Swagger Docs
+import swaggerUI from 'swagger-ui-express';
+import swaggerSpec from "./swagger.js";
+
 const __dirname = import.meta.dirname;
 
 // Configure for dev
@@ -39,7 +43,7 @@ const build = viteDevServer ?
 // app.use('/texttospeech', TTSRouter)
 // app.use('/upload', uploadRouter)
 app.use('/api', APIRouter)
-
+app.use('/docs', swaggerUI.serve, swaggerUI.setup(swaggerSpec));
 app.all("*", createRequestHandler({ build }));
 
 app.listen(3030, () => {

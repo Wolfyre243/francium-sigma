@@ -1,3 +1,5 @@
+// This is the index file of the root route, also known as the homepage.
+
 import { GithubIcon, APIIcon } from "../components/svg_icons";
 
 export default function Home() {
@@ -13,9 +15,9 @@ export default function Home() {
                     <GithubIcon width={30} height={30} hexColor="#ffffff" />
                     <p className="text-lg">Github</p>
                 </a>
-                <a className="flex flex-row w-fit gap-2 items-center justify-center bg-black px-5 py-3 rounded-xl">
+                <a href="/docs" className="flex flex-row w-fit gap-2 items-center justify-center bg-black px-5 py-3 rounded-xl">
                     <APIIcon width={25} height={25} hexColor="#ffffff" />
-                    <p className="text-lg">API</p>
+                    <p className="text-lg">Docs</p>
                 </a>
             </div>
 
