@@ -14,7 +14,10 @@ import express from 'express';
 const router = express.Router();
 
 // MARK: Set up Ollama related stuff
+import { ChatOllama } from '@langchain/ollama';
 import { ollamaEmbeddings as embeddings, defaultWorkflow } from '../library/ollamaSetup.js';
+
+import envconfig from '../secrets/env-config.json' with { type: "json" };
 
 let prev_messages = []; // This stores the previous messages as a string.
 
@@ -141,7 +144,20 @@ router.post('/', async (req,res) => {
     res.json({
         result: finalResult.messages[finalResult.messages.length - 1].content
     })
-})
+});
+
+// router.post('/greeting', async (res, req) => {
+//     const ollama = new ChatOllama({
+//         baseUrl: `http://${envconfig.endpoint}:11434`,
+//         model: 'aegis:v0.7',
+//         keepAlive: -1
+//     });
+
+//     const response = await ollama.invoke(req.body.message);
+//     res.json({
+//         result: response
+//     })
+// })
 
 // TODO: consider implementing streaming here next time
 
