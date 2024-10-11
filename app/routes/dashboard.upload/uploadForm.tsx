@@ -1,5 +1,21 @@
 import React, { useState, useRef } from 'react';
 
+
+
+// export function DocumentItem({
+//     fileName, handleDelete, ref
+// } : { fileName: string, handleDelete: any, ref: any }) {
+//     // const rmFileBtnRef = useRef<HTMLButtonElement>(null);
+    
+//     return (
+//         <div className='flex flex-row justify-between bg-tertiary rounded-lg px-4 py-2'>
+//             <p>{fileName}</p>
+//             <button onClick={handleDelete} type='button'>X</button>
+//         </div>
+//     );
+// }
+
+
 export default function UploadForm() {
     // Create a ref to the file input field
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -11,6 +27,7 @@ export default function UploadForm() {
         fileInputRef.current!.files = event.dataTransfer.files;
         // Set the dropped files to display
         let droppedFiles = event.dataTransfer.files;
+        // TODO: Make sure files are added to the pile instead of refreshing the entire thing (do removal first)
         setFiles([
             ...droppedFiles
         ]);
@@ -18,6 +35,15 @@ export default function UploadForm() {
 
     const handleDragOver = (event: any) => {
         event.preventDefault();
+    };
+
+    const handleDelete = (event: any) => {
+        const parent = event.target.parentElement;
+        const index = parent.getAttribute('index-remove');
+        if (index != null) {
+            files.splice(index, 1);
+            setFiles([ ...files ]);
+        }
     }
 
     return (
@@ -27,12 +53,15 @@ export default function UploadForm() {
             </label>
             <input id="file_input" type="file" name="file"/> */}
             <div id="dropArea" onDrop={handleDrop} onDragOver={handleDragOver}
-            className='outline-dotted outline-2 outline-tertiary p-3 flex flex-col justify-center items-center text-center w-full h-full'>
+            className='outline-dotted outline-2 outline-tertiary p-3 flex flex-col w-full h-full gap-3'>
             {
                 files.length != 0 ? 
                 files.map((file: any, index: number) => (
-                    // Include better file UI here, e.g. cancel button to remove file
-                    <p key={index}>{file.name}</p>
+                    // TODO: Improve on file item ui, such as a better button
+                    <div key={index} index-remove={index} className='flex flex-row justify-between bg-tertiary rounded-lg px-4 py-2'>
+                        <p>{file.name}</p>
+                        <button onClick={handleDelete} type='button'>X</button>
+                    </div>
                 )) :
                 // This is the div for when no files are present
                 <div>

@@ -19,7 +19,10 @@ export const loader = async ({ params, } : LoaderFunctionArgs) => {
         }
     })
     .then(res => res.json())
-    .then(res => res.result);
+    .then(res => res.result)
+    .catch(err => {
+        throw json({ greeting: "Oops, there's something wrong in my system!"})
+    });
 
     return defer({
         greeting: responsePromise

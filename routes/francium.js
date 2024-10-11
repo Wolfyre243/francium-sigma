@@ -119,28 +119,32 @@ router.post('/', async (req,res) => {
         { configurable: { thread_id: "42" } },
     );
     // console.log(finalResult);
-
-    const pg_basepool = createBasePool("database-atlantis");
-    const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));
-    
-    // Prepare the interaction to be stored into the database
-    const today = new Date(Date.now());
-    const chatInteraction = {
-        pageContent: `${req.body.message}\nAlyssa:${finalResult.messages[finalResult.messages.length - 1].content}`,
-        metadata: {
-            conversationId: conversationId,
-            serialNo: messageSerialNo,
-            date: today.toISOString(),
+    try {
+        const pg_basepool = createBasePool("database-atlantis");
+        const pgvectorConvoStore = await PGVectorStore.initialize(embeddings, createPGConvoConfig(pg_basepool));
+        
+        // Prepare the interaction to be stored into the database
+        const today = new Date(Date.now());
+        const chatInteraction = {
+            pageContent: `${req.body.message}\nAlyssa:${finalResult.messages[finalResult.messages.length - 1].content}`,
+            metadata: {
+                conversationId: conversationId,
+                serialNo: messageSerialNo,
+                date: today.toISOString(),
+            }
         }
+
+        await pgvectorConvoStore.addDocuments(
+            [chatInteraction],
+            { ids: [uuidv4()] }
+        )
+
+        pg_basepool.end(); // Ends the pool
+
+    } catch (error) {
+        console.log(error);
     }
-
-    await pgvectorConvoStore.addDocuments(
-        [chatInteraction],
-        { ids: [uuidv4()] }
-    )
-
-    pg_basepool.end(); // Ends the pool
-
+    
     res.json({
         result: finalResult.messages[finalResult.messages.length - 1].content
     })
