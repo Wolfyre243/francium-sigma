@@ -1,21 +1,45 @@
 import { useState, useRef } from 'react';
 import { BlankDocumentIcon } from '../../components/svg_icons';
+import { redirect } from '@remix-run/node';
+import { useFetcher, Form } from '@remix-run/react';
+
+function fileListIterator(fileList: FileList): Array<File> {
+    let fileArr: Array<File> = [];
+    for (const file of fileList) {
+        fileArr.push(file);
+    }
+    console.log("iterated array: ", fileArr)
+    return fileArr;
+}
+
+function appendFiles(originalFileList: FileList | null, incomingFileList: FileList): FileList {
+    let newFileList = new DataTransfer();
+    for (const file of originalFileList!) {
+        newFileList.items.add(file);
+    };
+    for (const file of incomingFileList) {
+        newFileList.items.add(file);
+    }
+    console.log("newfilelist:", newFileList.files);
+    return newFileList.files;
+}
 
 export default function UploadForm() {
     // Create a ref to the file input field
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const formRef = useRef<HTMLFormElement>(null);
+
+    const fetcher = useFetcher({ key: "upload-files"});
+
     // Define states
-    const [files, setFiles] = useState<any>([]);
+    let [files, setFiles] = useState<Array<File>>([]);
     const [enter, setEnter] = useState<Boolean>(false);
 
     const handleDrop = (event: any) => {
         event.preventDefault();
-        // Assign dropped files to the file input field
-        fileInputRef.current!.files = event.dataTransfer.files;
-        // Set the dropped files to display
-        let droppedFiles = event.dataTransfer.files;
-        files.push(...droppedFiles);
-        setFiles([ ...files ]);
+        // Append dropped files to the file input field
+        fileInputRef.current!.files = appendFiles(fileInputRef.current!.files, event.dataTransfer.files);
+        setFiles(fileListIterator(fileInputRef.current!.files));
     };
 
     // Handle Drag events
@@ -32,30 +56,64 @@ export default function UploadForm() {
     const handleDragLeave = (event: any) => {
         setTimeout(() => setEnter(false), 100);
         console.log('dragleave');
-    }
+    };
 
     // Delete the relative document item
     const handleDelete = (event: any) => {
+        // Initialise new file list
+        let newFileList = new DataTransfer();
+        for (const file of fileInputRef.current!.files!) {
+            newFileList.items.add(file);
+        }
+        // Get the index to remove
         const parent = event.target.parentElement;
         const index = parent.getAttribute('index-remove'); // Get the index of the item to remove.
         if (index != null) {
-            files.splice(index, 1);
+            // Remove the file
+            newFileList.items.remove(index);
+            console.log(newFileList.files);
+            // Apply updated changes
+            fileInputRef.current!.files = newFileList.files;
+            // Update the "files" state
+            files = fileListIterator(fileInputRef.current!.files!);
             setFiles([ ...files ]);
-        };
-        // Place the UI back to default if no files exist anymore
-        if (files.length === 0 ) {
-            setEnter(false);
-        };
+            // Place the UI back to default if no files exist anymore
+            if (files.length === 0 ) {
+                setEnter(false);
+            };
+        };  
     };
 
-    const handleUpdate = (event: any) => {
-        let droppedFiles = event.target.files;
-        files.push(...droppedFiles); // Push in new files
-        setFiles([ ...files ]);
-    }
+    const handleSubmit = (event: any) => {
+        if (!fileInputRef.current!.files!.length) {
+            event.preventDefault();
+        } else {
+            // fetcher.submit(fetcher.formData!, {
+            //     action: '/api/upload/test',
+            //     method: 'POST',
+            // });
+            formRef.current!.submit();
+            formRef.current!.reset();
+            files = [];
+            setFiles([ ...files ]);
+            setEnter(false);
+        }
+    };
+
+    const handleReset = (event: any) => {
+        if (!fileInputRef.current!.files!.length) {
+            event.preventDefault();
+        } else {
+            formRef.current!.submit();
+            formRef.current!.reset();
+            files = [];
+            setFiles([ ...files ]);
+            setEnter(false);
+        }
+    };
 
     return (
-        <form action="" className="flex flex-col gap-6 w-full justify-center items-start">
+        <fetcher.Form action="/api/upload/test" method='post' ref={formRef} onSubmit={handleSubmit} encType='multipart/form-data' className="flex flex-col gap-6 w-full justify-center items-start">
             {/* <label htmlFor="file_input" className="rounded-md px-3 py-1 bg-slate-500 cursor-pointer">
                 Upload Document
             </label>
@@ -91,7 +149,7 @@ export default function UploadForm() {
                 </div>
             }
             </div>
-            <input ref={fileInputRef} id='fileInput' type="file" name="file" multiple hidden onChange={handleUpdate}/>
+            <input ref={fileInputRef} id='fileInput' type="file" name="files" multiple hidden/>
 
             <div className='flex flex-row gap-2 items-baseline'>
                 <button type="submit" className="bg-accent text-primary px-3 py-1 rounded-md flex flex-row gap-2 items-center">
@@ -103,6 +161,6 @@ export default function UploadForm() {
                 <p className='text-xs text-stone-700'>Project Francium™ is not responsible for any breach of data privacy. Please ensure that all files uploaded are appropriate and do not contain personal information.</p>
             </div>
 
-        </form>
+        </fetcher.Form>
     );
 }

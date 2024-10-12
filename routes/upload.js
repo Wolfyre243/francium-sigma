@@ -28,15 +28,15 @@ import { ollamaEmbeddings as embeddings, defaultWorkflow } from '../library/olla
 import { splitText } from '../library/textSplitter.js';
 
 // Define multer stuff here
-const serverStorage = multer.diskStorage({
+const serverStorageDocuments = multer.diskStorage({
     destination: function(req, file, cb) {
-        cb(null, './ServerStorage');
+        cb(null, './ServerStorage/documents');
     },
     filename: function(req, file, cb) {
-        cb(null, `${uuidv4()}-${file.originalname}`);
+        cb(null, `${Date.now()}-${file.originalname}`);
     }
 });
-const upload = multer({ storage: serverStorage });
+const uploadDocs = multer({ storage: serverStorageDocuments });
 
 // Helper functions
 function createIDs(amount) {
@@ -48,7 +48,7 @@ function createIDs(amount) {
 }
 
 // 'file' has to be the same name as the name of the input field in the form
-router.post('/notes', upload.single('file'), async (req, res) => {
+router.post('/notes', uploadDocs.single('file'), async (req, res) => {
     // TODO: In the future, create a simple front-end to upload documents, temporarily.
     // For now, we will be passing in the file path instead.
 
@@ -86,8 +86,10 @@ router.post('/notes', upload.single('file'), async (req, res) => {
     res.send("Uploaded Successfully");
 });
 
-router.post('/test', upload.single('file'), async (req, res) => {
-    res.json(req.file);
+router.post('/test', uploadDocs.array('files', 10), async (req, res) => {
+    console.log(req.files);
+    // TODO: Add proper parsing from above here
+    res.redirect("/dashboard/upload");
 })
 
 export default router;
