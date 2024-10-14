@@ -29,8 +29,6 @@ export default function UploadForm() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const formRef = useRef<HTMLFormElement>(null);
 
-    const fetcher = useFetcher({ key: "upload-files"});
-
     // Define states
     let [files, setFiles] = useState<Array<File>>([]);
     const [enter, setEnter] = useState<Boolean>(false);
@@ -41,6 +39,12 @@ export default function UploadForm() {
         fileInputRef.current!.files = appendFiles(fileInputRef.current!.files, event.dataTransfer.files);
         setFiles(fileListIterator(fileInputRef.current!.files));
     };
+
+    const handleChange = (event: any) => {
+        event.preventDefault();
+        
+        setFiles(fileListIterator(event.target.files));
+    }
 
     // Handle Drag events
     const handleDragOver = (event: any) => {
@@ -100,20 +104,8 @@ export default function UploadForm() {
         }
     };
 
-    const handleReset = (event: any) => {
-        if (!fileInputRef.current!.files!.length) {
-            event.preventDefault();
-        } else {
-            formRef.current!.submit();
-            formRef.current!.reset();
-            files = [];
-            setFiles([ ...files ]);
-            setEnter(false);
-        }
-    };
-
     return (
-        <fetcher.Form action="/api/upload/test" method='post' ref={formRef} onSubmit={handleSubmit} encType='multipart/form-data' className="flex flex-col gap-6 w-full justify-center items-start">
+        <Form action="/api/upload/notes" method='post' ref={formRef} onSubmit={handleSubmit} encType='multipart/form-data' className="flex flex-col gap-6 w-full justify-center items-start">
             {/* <label htmlFor="file_input" className="rounded-md px-3 py-1 bg-slate-500 cursor-pointer">
                 Upload Document
             </label>
@@ -149,7 +141,7 @@ export default function UploadForm() {
                 </div>
             }
             </div>
-            <input ref={fileInputRef} id='fileInput' type="file" name="files" multiple hidden/>
+            <input ref={fileInputRef} id='fileInput' type="file" name="files" multiple hidden onChange={handleChange}/>
 
             <div className='flex flex-row gap-2 items-baseline'>
                 <button type="submit" className="bg-accent text-primary px-3 py-1 rounded-md flex flex-row gap-2 items-center">
@@ -161,6 +153,6 @@ export default function UploadForm() {
                 <p className='text-xs text-stone-700'>Project Francium™ is not responsible for any breach of data privacy. Please ensure that all files uploaded are appropriate and do not contain personal information.</p>
             </div>
 
-        </fetcher.Form>
+        </Form>
     );
 }

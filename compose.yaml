@@ -52,20 +52,20 @@ services:
 
   # Start the Francium Chat application.
   # This is a simple chat interface to test and run the Ollama LLMs.
-  francium-chat:
-    image: francium-chat:v0.2.0
-    ports:
-      - 3000:3000
-    build: .
-    develop:
-      watch:
-        - action: sync
-          path: ./app
-          target: /usr/src/app
-          ignore:
-            - node_modules/
-        - action: rebuild
-          path: ./app/package.json
+  # francium-chat:
+  #   image: francium-chat:v0.2.0
+  #   ports:
+  #     - 3000:3000
+  #   build: .
+  #   develop:
+  #     watch:
+  #       - action: sync
+  #         path: ./app
+  #         target: /usr/src/app
+  #         ignore:
+  #           - node_modules/
+  #       - action: rebuild
+  #         path: ./app/package.json
 
   
 

@@ -47,48 +47,71 @@ function createIDs(amount) {
     return ids;
 }
 
-// 'file' has to be the same name as the name of the input field in the form
-router.post('/notes', uploadDocs.single('file'), async (req, res) => {
-    // TODO: In the future, create a simple front-end to upload documents, temporarily.
-    // For now, we will be passing in the file path instead.
+// 'files' has to be the same name as the name of the input field in the form
+// Max 10 files at a time
+router.post('/notes', uploadDocs.array('files', 10), async (req, res) => {
+    // Redirect the user first
+    res.redirect("/dashboard/upload");
 
-    // TODO: Ensure no dupe documents are uploaded.
-    const filePath = req.file.path;
-
-    const pdfLoader = new PDFLoader(filePath, {
-        parsedItemSeparator: ''
-    });
-    const docs = await pdfLoader.load();
-    const chunkedDocs = await splitText(docs);
-
-    // Assign additional metadata
-    for (const doc of chunkedDocs) {
-        doc.metadata.date_uploaded = (new Date(Date.now())).toISOString();
-        doc.metadata.filename = req.file.originalname;
-    };
-
-    // Store documents into the database.
+    // Initialise database
     const pg_basepool = createBasePool("database-atlantis");
     const pgvectorDocumentStore = await PGVectorStore.initialize(embeddings, createPGDocumentConfig(pg_basepool, "notes"));
+    
+    // TODO: Add file extension detection here
 
-    const documentIDs = createIDs(chunkedDocs.length);
+    // DEV
+    const startTime = Date.now();
 
-    await pgvectorDocumentStore.addDocuments(chunkedDocs, {
-        ids: documentIDs
+    const promiseList = [];
+    const docsToUpload = [];
+
+    // For each file sent to the server, parse them as PDFs
+    for await (const file of req.files) {
+        // TODO: Ensure no dupe documents are uploaded.
+        const filePath = file.path;
+
+        // Parse PDF files
+        const pdfLoader = new PDFLoader(filePath, {
+            parsedItemSeparator: ''
+        });
+        const docs = await pdfLoader.load();
+        promiseList.push(
+            splitText(docs)
+                .then(async (chunkedDocs) => {
+                    // Create a uuid for the parent document
+                    const parentID = uuidv4();
+
+                    // Assign additional metadata
+                    for (const doc of chunkedDocs) {
+                        doc.metadata.date_uploaded = (new Date(Date.now())).toISOString();
+                        doc.metadata.filename = file.originalname;
+                        doc.metadata.parentID = parentID;
+                    };
+
+                    // Store documents into the database.
+                    console.log('Uploading docs...');
+                    await pgvectorDocumentStore.addDocuments(chunkedDocs, {
+                        ids: createIDs(chunkedDocs.length)
+                    });
+
+                    return chunkedDocs;
+                })
+        );
+    };
+
+    console.log(promiseList);
+
+    Promise.all(promiseList).then(() => {
+        // DEV
+        console.log('Time taken to upload: ', Date.now() - startTime + 'ms');
+        pg_basepool.end();
     });
 
-    pg_basepool.end();
-
-    // res.json({
-    //     result: chunkedDocs
-    // });
-    // res.json(chunkedDocs);
-    res.send("Uploaded Successfully");
+    
 });
 
 router.post('/test', uploadDocs.array('files', 10), async (req, res) => {
     console.log(req.files);
-    // TODO: Add proper parsing from above here
     res.redirect("/dashboard/upload");
 })
 

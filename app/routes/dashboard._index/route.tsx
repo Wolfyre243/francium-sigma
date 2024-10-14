@@ -12,7 +12,7 @@ export const loader = async ({ params, } : LoaderFunctionArgs) => {
     const responsePromise = fetch(`http://localhost:3030/api/francium`, {
         method: 'POST',
         body: JSON.stringify({
-            message: "wolfyre.: Hello Alyssa"
+            message: "Wolfyre: Hello Alyssa"
         }),
         headers: {
             "Content-Type": "application/json"
