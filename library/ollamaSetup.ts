@@ -8,6 +8,7 @@ import { StringOutputParser } from  '@langchain/core/output_parsers';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { SearxngSearch } from '@langchain/community/tools/searxng_search';
 import { EnsembleRetriever } from "langchain/retrievers/ensemble";
+import { ToolMessageFieldsWithToolCallId } from '@langchain/core/messages';
 
 // Hugging Face dependencies
 import { pipeline } from '@xenova/transformers';
@@ -31,7 +32,7 @@ import { fetchUpcomingEventsTool } from '../tools/notionTools.js';
 import envconfig from '../secrets/env-config.json' with { type: "json" };
 
 // Set up the tools
-let tools = [calculatorTool, todoToolkit, fetchUpcomingEventsTool];
+let tools: any = [calculatorTool, todoToolkit, fetchUpcomingEventsTool];
 tools = tools.flat();
 const toolNode = new ToolNode(tools);
 
@@ -43,7 +44,7 @@ export const ollama = new ChatOllama({
 
 export const ollamaEmbeddings = new OllamaEmbeddings({
     baseUrl: `http://${envconfig.endpoint}:11434`,
-    keepAlive: -1
+    keepAlive: "-1"
     // TODO: Change the model instead of using default
 });
 
@@ -63,12 +64,12 @@ const vanillaModel = new ChatOllama({
 });
 
 // Create a temporary variable to store the user's message.
-let userMessage = '';
+let userMessage: any = '';
 
 //--------------------------------MARK: Define Functions for the Nodes--------------------------------
 // Determine whether the LLM should continue on or end the conversation and reply to the user.
 // This might be depreceated in favor of shouldRetrieve
-function shouldContinue({ messages }) {
+function shouldContinue({ messages } : { messages: any }) {
     console.log("---DETECT TOOL CALLS---");
     const lastMessage = messages[messages.length -1];
     // If LLM made a tool call, we route to the "tools" node.
@@ -85,7 +86,7 @@ function shouldContinue({ messages }) {
 // However, I'm not sure whether to make it check if local database is sufficient before searching online.
 // I'll need some test documents before trying this out though
 
-async function callModel(state) {
+async function callModel(state: any) {
     console.log("---GENERATE---");
 
     const response = await ollama.invoke(state.messages);
@@ -94,7 +95,7 @@ async function callModel(state) {
     return { messages: [response] };
 }
 
-async function promptRewriter({ messages} ) {
+async function promptRewriter({ messages } : { messages: any }) {
     const rewriterPrompt = ChatPromptTemplate.fromTemplate(
         `You a question re-writer that converts an input question to a better version that is optimized
         for vectorstore retrieval. Look at the initial and formulate an improved question.
@@ -118,7 +119,7 @@ async function promptRewriter({ messages} ) {
     return { messages: messages };
 }
 
-async function getPastConversations({ messages }) {
+async function getPastConversations({ messages } : { messages: any }) {
     // Get the user's input
     // const lastMessage = messages[messages.length - 1];
     // userMessage = lastMessage;
@@ -138,7 +139,7 @@ async function getPastConversations({ messages }) {
 
         const filteredDocs = await gradeMessages(searchResults, userMessage);
 
-        messages.push(new ToolMessage(`Here are some potentially relevant past conversations from long ago. Use them at your own discretion, and ensure that they are relevant before using this information as context. ${filteredDocs.join('\n\n')}`));
+        messages.push(new ToolMessage({ content: `Here are some potentially relevant past conversations from long ago. Use them at your own discretion, and ensure that they are relevant before using this information as context. ${filteredDocs.join('\n\n')}` } as ToolMessageFieldsWithToolCallId));
 
         return { messages: messages };
     
@@ -148,7 +149,7 @@ async function getPastConversations({ messages }) {
     }
 }
 
-async function gradeMessages(documents, question) {
+async function gradeMessages(documents: any, question: any) {
     console.log("---GRADING: DOCUMENT RELEVANCE---");
     console.log(`Question: ${question}`);
 
@@ -198,7 +199,7 @@ async function gradeMessages(documents, question) {
         });
         if (grade.binaryScore === "yes") {
             console.log("---GRADE: RELEVANT DOCUMENT---");
-            const today = new Date(Date.now());
+            const today: any = new Date(Date.now());
             const timeDiff = Math.floor((today-doc.metadata.date) / 1000 / 60 / 60 / 24);
             filteredDocs.push(`{
                 [Similarity score: ${score}]\n
@@ -215,7 +216,7 @@ async function gradeMessages(documents, question) {
 
 }
 
-async function gradeGenerationResult({ messages }) {
+async function gradeGenerationResult({ messages } : { messages: any }) {
     console.log(`---GRADING: GENERATION RESULT---`);
 
     const lastMessage = messages[messages.length-1];
@@ -268,13 +269,13 @@ async function gradeGenerationResult({ messages }) {
     } else {
         // If irrelevant, wipe previous data and regenerate.
         console.log('Irrelevant response; Regenerating...');
-        messages.push(new ToolMessage(`Generated response was irrelevant. Try again.`))
+        messages.push(new ToolMessage({ content: `Generated response was irrelevant. Try again.` } as ToolMessageFieldsWithToolCallId))
 
         return "generate";
     }
 }
 
-async function shouldRetrievePastConvo({ messages }) {
+async function shouldRetrievePastConvo({ messages } : { messages: any }) {
     // const members = ['web_search', 'internal_database', 'no_retrieval'];
     console.log("---SHOULD RETRIEVE PAST CONVO---");
 
@@ -326,7 +327,7 @@ async function shouldRetrievePastConvo({ messages }) {
 }
 
 // This model will help decide whether or not to call a tool
-async function callToolModel({ messages }) {
+async function callToolModel({ messages } : { messages: any }) {
     console.log("---DETERMINING WHETHER TO CALL TOOLS---")
 
     // TODO: Turn this into a tool calling agent that automatically decides itself whether to call tools or not.
@@ -367,7 +368,7 @@ async function webSearch() {
     return responseArr;
 }
 
-async function shouldSearchWeb({ messages }) {
+async function shouldSearchWeb({ messages } : { messages: any }) {
     console.log("---SHOULD DO WEB SEARCH---")
     const prompt = ChatPromptTemplate.fromTemplate(
         `You are a grader assessing the need to retrieve information from the internet, based on the user's message.
@@ -405,7 +406,7 @@ async function shouldSearchWeb({ messages }) {
     if (searchChoice.binaryScore === "yes") {
         console.log("---WEB SEARCH---");
         const responses = await webSearch();
-        messages.push(new ToolMessage(`Here are some results from a web search: ${responses}`));
+        messages.push(new ToolMessage({ content: `Here are some results from a web search: ${responses}` } as ToolMessageFieldsWithToolCallId));
         return { messages: messages };
     } else {
         console.log("---NO WEB SEARCH---");
@@ -413,7 +414,7 @@ async function shouldSearchWeb({ messages }) {
     }
 }
 
-async function gradeDocuments(documents, question) {
+async function gradeDocuments(documents: any, question: any) {
     console.log("---GRADING: DOCUMENT RELEVANCE---");
     console.log(`Question: ${question}`);
 
@@ -476,7 +477,7 @@ async function gradeDocuments(documents, question) {
 
 }
 
-async function retrieveDocuments({ messages }) {
+async function retrieveDocuments({ messages } : { messages: any }) {
     console.log("---SHOULD RETRIEVE DOCUMENTS---");
 
     // Decide whether to retrieve info
@@ -560,7 +561,7 @@ async function retrieveDocuments({ messages }) {
             const filteredDocs = await gradeDocuments(retrievedDocs, query);
             console.log(filteredDocs);
 
-            messages.push(new ToolMessage(`Here are some potentially relevant documents pertaining the user's question. Please further evaluate their relevance before using them as context. ${filteredDocs.join('\n\n')}`));
+            messages.push(new ToolMessage({ content: `Here are some potentially relevant documents pertaining the user's question. Please further evaluate their relevance before using them as context. ${filteredDocs.join('\n\n')}` } as ToolMessageFieldsWithToolCallId));
             return { messages: messages };
         
         } catch (error) {
