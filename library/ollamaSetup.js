@@ -89,6 +89,8 @@ async function callModel(state) {
     console.log("---GENERATE---");
 
     const response = await ollama.invoke(state.messages);
+
+    console.log("---FINISHED GENERATING---");
     return { messages: [response] };
 }
 
@@ -327,6 +329,7 @@ async function shouldRetrievePastConvo({ messages }) {
 async function callToolModel({ messages }) {
     console.log("---DETERMINING WHETHER TO CALL TOOLS---")
 
+    // TODO: Turn this into a tool calling agent that automatically decides itself whether to call tools or not.
     const response = await toolModel.invoke(messages);
     console.log(response);
     return { messages: [response] };

@@ -5,4 +5,11 @@ ollama_model_storage
 secrets
 ServerStorage
 
+build
+
+postcss.config.js
+tailwind.config.js
+testapi.js
+
+
 output.wav
