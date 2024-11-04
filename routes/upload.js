@@ -24,7 +24,7 @@ import express from 'express';
 const router = express.Router();
 
 // MARK: Set up Ollama related stuff
-import { ollamaEmbeddings as embeddings, defaultWorkflow } from '../library/ollamaSetup.js';
+import { ollamaEmbeddings as embeddings, defaultWorkflow } from '../library/ollamaSetup.ts';
 import { splitText } from '../library/textSplitter.js';
 
 // Define multer stuff here

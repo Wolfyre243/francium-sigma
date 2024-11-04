@@ -1,11 +1,12 @@
 //----------------------------------MARK: Import dependencies--------------------------------------
 // Import langchain stuff
 import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama';
-import { AIMessage, HumanMessage, BaseMessage, ChatMessage, ToolMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, BaseMessage, ChatMessage, ToolMessage, SystemMessage, MessageContent } from "@langchain/core/messages";
 import { StateGraph, MessagesAnnotation, START, END, Annotation } from '@langchain/langgraph';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts'
 import { StringOutputParser } from  '@langchain/core/output_parsers';
-import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { createReactAgent, ToolNode } from '@langchain/langgraph/prebuilt';
+import { AgentExecutor, createToolCallingAgent } from 'langchain/agents';
 import { SearxngSearch } from '@langchain/community/tools/searxng_search';
 import { EnsembleRetriever } from "langchain/retrievers/ensemble";
 import { ToolMessageFieldsWithToolCallId } from '@langchain/core/messages';
@@ -30,6 +31,8 @@ import { fetchUpcomingEventsTool } from '../tools/notionTools.js';
 
 // Import extra stuff
 import envconfig from '../secrets/env-config.json' with { type: "json" };
+import { RunnableConfig } from '@langchain/core/runnables';
+import { DocumentInterface } from '@langchain/core/documents';
 
 // Set up the tools
 let tools: any = [calculatorTool, todoToolkit, fetchUpcomingEventsTool];
@@ -44,7 +47,6 @@ export const ollama = new ChatOllama({
 
 export const ollamaEmbeddings = new OllamaEmbeddings({
     baseUrl: `http://${envconfig.endpoint}:11434`,
-    keepAlive: "-1"
     // TODO: Change the model instead of using default
 });
 
@@ -65,6 +67,33 @@ const vanillaModel = new ChatOllama({
 
 // Create a temporary variable to store the user's message.
 let userMessage: any = '';
+
+const GraphState = Annotation.Root({
+    messages: Annotation<BaseMessage[]>({
+        reducer: (x, y) => x.concat(y),
+        default: () => [],
+    }),
+    question: Annotation<MessageContent>({
+        reducer: (x, y) => y ?? x ?? '',
+    }),
+    documents: Annotation<string>({
+        reducer: (x, y) => y ?? x ?? '',
+    }),
+    memories: Annotation<string>({
+        reducer: (x, y) => y ?? x ?? '',
+    }),
+    webresults: Annotation<string>({
+        reducer: (x, y) => y ?? x ?? '',
+    }),
+    toolresults: Annotation<string>({
+        reducer: (x, y) => y ?? x ?? '',
+    }),
+    // The agent node that last performed work
+    next: Annotation<string>({
+        reducer: (x, y) => y ?? x ?? END,
+        default: () => END,
+    }),
+});
 
 //--------------------------------MARK: Define Functions for the Nodes--------------------------------
 // Determine whether the LLM should continue on or end the conversation and reply to the user.
@@ -89,13 +118,32 @@ function shouldContinue({ messages } : { messages: any }) {
 async function callModel(state: any) {
     console.log("---GENERATE---");
 
-    const response = await ollama.invoke(state.messages);
+    const prompt = ChatPromptTemplate.fromTemplate(
+        `Here is my question:
+        {question} \n
+        {documents} \n
+        {memories} \n
+        {webresults} \n
+        {toolresults} \n
+        `
+    )
+
+    const generationChain = prompt.pipe(ollama).pipe(new StringOutputParser());
+    const response = await generationChain.invoke({
+        question: state.question,
+        documents: state.documents,
+        memories: state.memories,
+        webresults: state.webresults,
+        toolresults: state.toolresults,
+    });
 
     console.log("---FINISHED GENERATING---");
-    return { messages: [response] };
+    console.log(state.messages);
+    state.messages.push(new AIMessage(response));
+    return { messages: state.messages };
 }
 
-async function promptRewriter({ messages } : { messages: any }) {
+async function promptRewriter(state: any) {
     const rewriterPrompt = ChatPromptTemplate.fromTemplate(
         `You a question re-writer that converts an input question to a better version that is optimized
         for vectorstore retrieval. Look at the initial and formulate an improved question.
@@ -111,15 +159,15 @@ async function promptRewriter({ messages } : { messages: any }) {
 
     const rewriter = rewriterPrompt.pipe(vanillaModel).pipe(new StringOutputParser());
     const response = await rewriter.invoke({
-        question: userMessage
+        question: state.question
     });
     console.log(response);
-    userMessage = response;
+    // userMessage = response;
 
-    return { messages: messages };
+    return state;
 }
 
-async function getPastConversations({ messages } : { messages: any }) {
+async function getPastConversations(state: any) {
     // Get the user's input
     // const lastMessage = messages[messages.length - 1];
     // userMessage = lastMessage;
@@ -130,18 +178,18 @@ async function getPastConversations({ messages } : { messages: any }) {
         const pgvectorConvoStore = await PGVectorStore.initialize(ollamaEmbeddings, createPGConvoConfig(pg_basepool));
         
         const searchResults = await pgvectorConvoStore.similaritySearchWithScore(
-            userMessage,
+            state.question,
             5
         );
         
         console.log("Finished querying message history table!");
         pg_basepool.end();
 
-        const filteredDocs = await gradeMessages(searchResults, userMessage);
+        const filteredDocs = await gradeMessages(searchResults, state.question);
 
-        messages.push(new ToolMessage({ content: `Here are some potentially relevant past conversations from long ago. Use them at your own discretion, and ensure that they are relevant before using this information as context. ${filteredDocs.join('\n\n')}` } as ToolMessageFieldsWithToolCallId));
+        // state.messages.push(new ToolMessage({ content: `Here are some potentially relevant past conversations from long ago. Use them at your own discretion, and ensure that they are relevant before using this information as context. ${filteredDocs.join('\n\n')}` } as ToolMessageFieldsWithToolCallId));
 
-        return { messages: messages };
+        return { memories: `Here are some potentially relevant past conversations from long ago. Use them at your own discretion, and ensure that they are relevant before using this information as context. ${filteredDocs.join('\n\n')}` };
     
     } catch (error) {
         console.log(error);
@@ -216,10 +264,10 @@ async function gradeMessages(documents: any, question: any) {
 
 }
 
-async function gradeGenerationResult({ messages } : { messages: any }) {
+async function gradeGenerationResult(state: any) {
     console.log(`---GRADING: GENERATION RESULT---`);
 
-    const lastMessage = messages[messages.length-1];
+    const lastMessage = state.messages[state.messages.length-1];
     console.log(`Message: ${lastMessage.content}`);
 
     const model = new ChatOllama({
@@ -260,7 +308,7 @@ async function gradeGenerationResult({ messages } : { messages: any }) {
     // Invoke the chain and deconstruct binaryScore from the result.
     const { binaryScore } = await chain.invoke({
         generation: lastMessage.content,
-        question: userMessage,
+        question: state.question,
     });
 
     if (binaryScore === "yes") {
@@ -269,13 +317,13 @@ async function gradeGenerationResult({ messages } : { messages: any }) {
     } else {
         // If irrelevant, wipe previous data and regenerate.
         console.log('Irrelevant response; Regenerating...');
-        messages.push(new ToolMessage({ content: `Generated response was irrelevant. Try again.` } as ToolMessageFieldsWithToolCallId))
+        state.messages.push(new ToolMessage({ content: `Generated response was irrelevant. Try again.` } as ToolMessageFieldsWithToolCallId))
 
         return "generate";
     }
 }
 
-async function shouldRetrievePastConvo({ messages } : { messages: any }) {
+async function shouldRetrievePastConvo(state: any) {
     // const members = ['web_search', 'internal_database', 'no_retrieval'];
     console.log("---SHOULD RETRIEVE PAST CONVO---");
 
@@ -286,14 +334,14 @@ async function shouldRetrievePastConvo({ messages } : { messages: any }) {
     });
 
     const prompt = ChatPromptTemplate.fromTemplate(
-        `You are a grader assessing the need to retrieve past memories from a long time ago.
-        Determine whether the conversation requires a memory, based on the user's message,
-        and respond with either 'yes' or 'no', to indicate whether past memories need to be retrieved.
+        `You are a grader assessing the need to retrieve your memories from the past.
+        Determine whether the conversation requires your past memory or any recollection, based on the user's question,
+        and respond with either 'yes' or 'no', to indicate whether your past memories need to be retrieved.
 
-        Here is the user's message:
-        {message}
+        Here is the user's question:
+        <question>{message}</question>
         
-        If the messages implies something that happened some time ago, indicate that a memory retrieval is needed.
+        If the question sounds like it requires a memory of something that happened some time ago, indicate that a memory retrieval is needed.
         Give a binary score 'yes' or 'no' score to indicate whether past memories need to be retrieved.`
     );
 
@@ -315,7 +363,7 @@ async function shouldRetrievePastConvo({ messages } : { messages: any }) {
     const supervisorChain = prompt.pipe(llmWithTool);
 
     const supervisorChoice = await supervisorChain.invoke({
-        message: userMessage,
+        message: state.question,
     });
     console.log(supervisorChoice.binaryScore);
     
@@ -327,17 +375,17 @@ async function shouldRetrievePastConvo({ messages } : { messages: any }) {
 }
 
 // This model will help decide whether or not to call a tool
-async function callToolModel({ messages } : { messages: any }) {
+async function callToolModel(state: any) {
     console.log("---DETERMINING WHETHER TO CALL TOOLS---")
 
     // TODO: Turn this into a tool calling agent that automatically decides itself whether to call tools or not.
-    const response = await toolModel.invoke(messages);
+    const response = await toolModel.invoke(state.messages);
     console.log(response);
     return { messages: [response] };
 }
 
 // This function will help to fetch web search results, and parse them.
-async function webSearch() {
+async function webSearch(state: any) {
     const webSearchPrompt = ChatPromptTemplate.fromTemplate(
         `You are a researcher that is capable of surfing the internet for external background information.
         Based on the user's message, generate a clean and simple search query to be used in the 
@@ -355,7 +403,7 @@ async function webSearch() {
 
     const searchChain = webSearchPrompt.pipe(vanillaModel).pipe(new StringOutputParser());
     const query = await searchChain.invoke({
-        message: userMessage
+        message: state.question
     })
     console.log(query);
 
@@ -368,7 +416,7 @@ async function webSearch() {
     return responseArr;
 }
 
-async function shouldSearchWeb({ messages } : { messages: any }) {
+async function shouldSearchWeb(state: any) {
     console.log("---SHOULD DO WEB SEARCH---")
     const prompt = ChatPromptTemplate.fromTemplate(
         `You are a grader assessing the need to retrieve information from the internet, based on the user's message.
@@ -400,17 +448,17 @@ async function shouldSearchWeb({ messages } : { messages: any }) {
     const searchChain = prompt.pipe(llmWithTool);
 
     const searchChoice = await searchChain.invoke({
-        message: userMessage
+        message: state.question
     });
     
     if (searchChoice.binaryScore === "yes") {
         console.log("---WEB SEARCH---");
-        const responses = await webSearch();
-        messages.push(new ToolMessage({ content: `Here are some results from a web search: ${responses}` } as ToolMessageFieldsWithToolCallId));
-        return { messages: messages };
+        const responses = await webSearch(state);
+        // state.messages.push(new ToolMessage({ content: `Here are some results from a web search: ${responses}` } as ToolMessageFieldsWithToolCallId));
+        return { webresults: `Here are some results from a web search: ${responses}` };
     } else {
         console.log("---NO WEB SEARCH---");
-        return { messages: messages };
+        return { webresults: '' };
     }
 }
 
@@ -477,7 +525,7 @@ async function gradeDocuments(documents: any, question: any) {
 
 }
 
-async function retrieveDocuments({ messages } : { messages: any }) {
+async function retrieveDocuments(state: any) {
     console.log("---SHOULD RETRIEVE DOCUMENTS---");
 
     // Decide whether to retrieve info
@@ -511,37 +559,37 @@ async function retrieveDocuments({ messages } : { messages: any }) {
     const searchChain = prompt.pipe(llmWithTool);
 
     const searchChoice = await searchChain.invoke({
-        message: userMessage
+        message: state.question
     });
     
     if (searchChoice.binaryScore === "yes") {
         // Create a new query from user's message
-        const queryPrompt = ChatPromptTemplate.fromTemplate(
-            `You are a researcher that is capable of searching databases efficiently for external background information.
-            Based on the user's message, generate a clean and simple search query to be used in the 
-            knowledge base. 
+        // const queryPrompt = ChatPromptTemplate.fromTemplate(
+        //     `You are a researcher that is capable of searching databases efficiently for external background information.
+        //     Based on the user's message, generate a clean and simple search query to be used in the 
+        //     knowledge base. 
             
-            Here is the user's message:
+        //     Here is the user's message:
 
-            <message>
-            {message}
-            </message>
+        //     <message>
+        //     {message}
+        //     </message>
 
-            Respond only with an improved search query. Do not include any preamble or explanation.
-            `
-        )
+        //     Respond only with an improved search query. Do not include any preamble or explanation.
+        //     `
+        // )
 
-        const queryChain = queryPrompt.pipe(vanillaModel).pipe(new StringOutputParser());
-        const query = await queryChain.invoke({
-            message: userMessage
-        })
+        // const queryChain = queryPrompt.pipe(vanillaModel).pipe(new StringOutputParser());
+        // const query = await queryChain.invoke({
+        //     message: userMessage
+        // })
 
         console.log("---RETRIEVING DOCUMENTS---");
-        console.log(`Query: ${query}`);
+        console.log(`Query: ${state.question}`);
 
         try {
             const pg_basepool = createBasePool("database-atlantis");
-            const pgvectorNotesStore = await PGVectorStore.initialize(ollamaEmbeddings, createPGDocumentConfig(pg_basepool, "notes"));
+            const pgvectorNotesStore = await PGVectorStore.initialize(ollamaEmbeddings, createPGDocumentConfig(pg_basepool, "notes")); // Document retrieval is currently only set to notes
             const notesRetriever = pgvectorNotesStore.asRetriever({
                 searchType: 'similarity',
                 k: 5,
@@ -553,16 +601,16 @@ async function retrieveDocuments({ messages } : { messages: any }) {
                 weights: [1]
             });
 
-            const retrievedDocs = await mainRetriever.invoke(query);
+            const retrievedDocs = await mainRetriever.invoke(state.question);
             console.log("Finished querying relevant documents!");
             console.log(retrievedDocs);
             pg_basepool.end();
 
-            const filteredDocs = await gradeDocuments(retrievedDocs, query);
+            const filteredDocs = await gradeDocuments(retrievedDocs, state.question);
             console.log(filteredDocs);
 
-            messages.push(new ToolMessage({ content: `Here are some potentially relevant documents pertaining the user's question. Please further evaluate their relevance before using them as context. ${filteredDocs.join('\n\n')}` } as ToolMessageFieldsWithToolCallId));
-            return { messages: messages };
+            // state.messages.push(new ToolMessage({ content: `Here are some potentially relevant documents pertaining the user's question. Please further evaluate their relevance before using them as context. ${filteredDocs.join('\n\n')}` } as ToolMessageFieldsWithToolCallId));
+            return { documents: `Here are some potentially relevant documents pertaining the user's question. Please further evaluate their relevance before using them as context. ${filteredDocs.join('\n\n')}` };
         
         } catch (error) {
             console.log(error);
@@ -571,31 +619,57 @@ async function retrieveDocuments({ messages } : { messages: any }) {
 
     } else {
         console.log("---NO DOCUMENT RETRIEVAL---");
-        return { messages: messages };
+        return { documents: '' };
     }
 }
+
+// Define Agents
+const generalToolAgent = createToolCallingAgent({
+    llm: model,
+    tools: tools,
+    prompt: ChatPromptTemplate.fromMessages(
+        [
+          ["system", "You are a helpful assistant"],
+          ["placeholder", "{chat_history}"],
+          ["human", "{input}"],
+          ["placeholder", "{agent_scratchpad}"],
+        ]
+    ),
+});
+
+const toolAgentNode = async (state: typeof GraphState.State, config?: RunnableConfig) => {
+    console.log("---DETERMINING WHETHER TO CALL TOOLS---");
+
+    const agentExecutor = AgentExecutor.fromAgentAndTools({ agent: generalToolAgent, tools, returnIntermediateSteps: true });
+    const result = await agentExecutor.invoke({ input: state.question });
+
+    // state.messages.push(new AIMessage({ content: result.output, name: "GeneralToolAgent" }));
+    // console.log(state.messages);
+    return { toolresults: `Here are the results from calling tools via the Tool Agent, if any:\n${result.output}` };
+};
 
 //-------------------------------------MARK: The Actual Graph-------------------------------------------
 
 // Basically seperate the tool calling from the generative LLM.
 // Continue invoking tools where necessary.
-const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, implement TS first.
-    .addNode("getInitialUserMessage", async ({ messages }) => {
-        userMessage = messages[messages.length - 1].content;
-        console.log(userMessage);
-        return { messages: messages };
+const workflow = new StateGraph(GraphState) // TODO: To use GraphState, implement TS first.
+    .addNode("getInitialUserMessage", async (state: any) => {
+        // userMessage = messages[messages.length - 1].content;
+        // const userQuestion = state.messages[state.messages.length - 1].content;
+        console.log(state.messages[state.messages.length - 1].content);
+        return { question: state.messages[state.messages.length - 1].content };
     })
     // .addNode("rewriter", promptRewriter)
     .addNode("getPastConvo", getPastConversations)
     .addNode("generate", callModel)
     .addNode("retrieveDocs", retrieveDocuments)
     .addNode("searchTool", shouldSearchWeb)
-    .addNode("toolAgent", callToolModel)
-    .addNode("tools", toolNode)
-    .addNode("removeExcess", async ({ messages }) => {
-        messages.pop();
-        return { messages: messages };
-    })
+    .addNode("toolAgent", toolAgentNode)
+    // .addNode("tools", toolNode)
+    // .addNode("removeExcess", async ({ messages }) => {
+    //     messages.pop();
+    //     return { messages: messages };
+    // })
     // Add Edges to the graph.
     .addEdge("__start__", "getInitialUserMessage")
     // TODO: Create "memories" instead of storing the entire convo
@@ -605,9 +679,10 @@ const workflow = new StateGraph(MessagesAnnotation) // TODO: To use GraphState, 
     // Retrieve info from local knowledge base
     .addEdge("searchTool", "retrieveDocs")
     .addEdge("retrieveDocs", "toolAgent")
-    .addConditionalEdges("toolAgent", shouldContinue, { continue: "tools", end: "removeExcess"})
-    .addEdge("tools", "toolAgent")
-    .addEdge("removeExcess", "generate")
+    // .addConditionalEdges("toolAgent", shouldContinue, { continue: "tools", end: "removeExcess"})
+    // .addEdge("tools", "toolAgent")
+    .addEdge("toolAgent", "generate")
+    // .addEdge("removeExcess", "generate")
     // Temporarily disabled self-reflection
     // .addConditionalEdges("generate", gradeGenerationResult, ["__end__", "generate"]);
     .addEdge("generate", "__end__")
