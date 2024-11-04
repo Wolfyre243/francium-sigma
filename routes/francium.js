@@ -15,7 +15,7 @@ const router = express.Router();
 
 // MARK: Set up Ollama related stuff
 import { ChatOllama } from '@langchain/ollama';
-import { ollamaEmbeddings as embeddings, defaultWorkflow } from '../library/ollamaSetup.js';
+import { ollamaEmbeddings as embeddings, defaultWorkflow } from '../library/ollamaSetup.ts';
 
 import envconfig from '../secrets/env-config.json' with { type: "json" };
 
@@ -115,7 +115,7 @@ let messageSerialNo = 0;
 
 router.post('/', async (req,res) => {
     const finalResult = await defaultWorkflow.invoke(
-        { messages: [new HumanMessage(req.body.message)] },
+        { messages: [new HumanMessage({ content: `${req.body.name ? req.body.name : "Wolfyre" }: ${req.body.message}`, name: req.body.name })], },
         { configurable: { thread_id: "42" } },
     );
     // console.log(finalResult);
@@ -147,7 +147,7 @@ router.post('/', async (req,res) => {
     
     res.json({
         result: finalResult.messages[finalResult.messages.length - 1].content
-    })
+    });
 });
 
 // router.post('/greeting', async (res, req) => {
